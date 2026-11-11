@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>季節解鎖計算器 | Season Spirit Calculator</title>
+<title>先靈解鎖計算器 | Spirit Calculator</title>
 
 <style>
 /* --- CSS 變數：輕鬆管理亮/暗色主題 --- */
@@ -80,38 +80,64 @@ button:active, .btn-secondary:active { transform: translateY(0); }
 .btn-reset { background-color: var(--danger-color); }
 
 /* --- 先祖卡片區塊 --- */
-/* align-items:flex-start -> 卡片各自依內容決定高度，不被同列最高的那張拉長。
-   否則嚮導（questap29 有 12 個任務）會把旁邊的先祖卡撐出一大片空白。
-   同季先祖因為 maxRowsPerLevel 墊過列，本來就等高，不靠 stretch。 */
-#spiritsContainer { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 20px; padding: 15px; max-width: 1800px; margin: 0 auto; }
-.spirit { display: flex; flex-direction: column; align-items: center; border: 1px solid var(--border-color); border-radius: 16px; padding: 12px; width: 100%; max-width: 240px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); background-color: var(--card-bg); transition: 0.3s; }
+/* align-items:flex-start -> flex 不管高度，改由 alignCardSections() 分群指定：
+   先祖樹一群、嚮導一群，各自齊平。不能用 stretch，因為 flex 行高取決於
+   「該行最高的那一張」，嚮導（questap29 有 12 個任務）在場時所有卡都會被拉到它那麼高。 */
+/* 卡片排成一條水平帶、左右捲動。原本是 flex-wrap:wrap，手機一列只塞得下一張，
+   一季五隻就要往下捲八個螢幕。改成不換行之後，頁高＝最高的那張卡。
+   scroll-snap 讓手指滑動停在卡片邊界，不會停在兩張中間。
+   justify-content 的 safe：卡片塞得下時置中，塞不下時自動退回 flex-start。
+   不能只寫 center —— 溢出時 center 會把第一張切掉一半，而且捲不回去
+   （捲動區取不到負的溢出區）。不支援 safe 的舊瀏覽器會整條宣告丟掉，
+   退回預設的 flex-start，也就是靠左，不會壞掉。 */
+#spiritsContainer { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 20px; padding: 15px; margin: 0 auto; max-width: 1800px;
+  justify-content: safe center;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-left: 15px; }
+#spiritsContainer::-webkit-scrollbar { height: 10px; }
+#spiritsContainer::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 5px; }
+.spirit { display: flex; flex-direction: column; align-items: center; border: 1px solid var(--border-color); border-radius: 16px; padding: 12px; width: 292px; flex: 0 0 auto; scroll-snap-align: start; box-shadow: 0 2px 8px rgba(0,0,0,0.05); background-color: var(--card-bg);
+  /* 不要寫成 transition: 0.3s（= all）：卡片高度由 JS 量完寫回，
+     高度一旦有過渡動畫，下一次量到的就是動畫中途的值（實測會差 16px）。 */
+  transition: box-shadow 0.3s, border-color 0.3s, transform 0.3s, background-color 0.3s; }
 .spirit:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: var(--primary-color); }
 .spirit-image { width: 85px; height: 85px; border-radius: 50%; margin-bottom: 10px; border: 3px solid var(--border-color); object-fit: cover; background: rgba(0,0,0,0.05); }
 .spirit-header { font-size: 16px; font-weight: bold; margin-bottom: 8px; color: var(--text-color); text-align: center; } 
 .spirit-footer { font-size: 12px; color: var(--text-muted); text-align: center; line-height: 1.6; background: var(--bg-color); padding: 8px; border-radius: 8px; width: 100%; }
 /* auto 吃掉卡片剩下的垂直空間 -> footer 貼在最下緣。
-   搭配上面的 align-items:flex-start，卡片不會被拉長，所以「剩下的空間」通常是 0，
-   footer 自然就接在兌換樹下方；真的被拉長時（例如之後改回 stretch）才會推到底。
-   保底留白由上一個區塊的 margin-bottom 提供（見 itemsContainer）。 */
+   卡片被 stretch 拉到同高後，矮卡多出來的空間就落在這裡。 */
 .spirit > .spirit-footer { margin-top: auto; }
 
 .spirit-controls { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; border-top: 1px dashed var(--border-color); width: 100%; font-size: 13px; }
 .input-group { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%;}
 .spirit-controls input[type="number"] { width: 45px; padding: 4px; font-size: 13px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-color); color: var(--text-color); text-align: center; }
 
-.level-row { display: flex; flex-direction: column-reverse; align-items: center; margin-bottom: 6px; border-top: 1px solid var(--border-color); padding-top: 8px; width: 100%; }
-.level-label { font-weight: bold; font-size: 12px; margin-top: 4px; color: var(--text-muted); }
+/* 每個 Lv 區塊 = 左邊一小段好感度進度條 + 右邊原本的那堆列。
+   進度條刻意切成一段一段掛在各區塊上，高度由 flex 自動等於該區塊，
+   所以不用量 getBoundingClientRect、不用 ResizeObserver，
+   換語言／切緊湊模式／字型載入造成的高度變化都會自動跟上。 */
+.level-block { display: flex; align-items: stretch; gap: 8px; width: 100%; margin-bottom: 6px; border-top: 1px solid var(--border-color); }
+.level-row { display: flex; flex-direction: column-reverse; align-items: center; padding-top: 8px; flex: 1 1 auto; min-width: 0; }
+.lv-seg { position: relative; width: 10px; flex: 0 0 auto; margin-top: 8px; border-radius: 5px; background: var(--border-color); opacity: 0.45; }
+/* 填充由下往上，對應「好感度從這層的門檻往下一層累積」 */
+.lv-seg > i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 5px; display: block; }
+.lv-seg > i.done { background: var(--success-color); }
+.lv-seg > i.now  { background: var(--primary-color); }
+/* 行高寫死：標籤有沒有掛「需 N」那個 span 會讓行框差 2px（bold 與 500 的字體度量不同），
+   最高層沒有門檻的先祖（例如只有兩層的長老）就會整張卡往上位移 2px。 */
+.level-label { font-weight: bold; font-size: 12px; line-height: 16px; margin-top: 4px; color: var(--text-muted); }
+.lv-need { font-weight: 500; line-height: inherit; opacity: 0.85; }
+.lv-need.met { color: var(--success-color); opacity: 1; }
 
 .items-row { 
     display: flex; 
     justify-content: flex-start; 
     gap: 6px; 
     margin-bottom: 4px; 
-    width: 198px; /* 固定寬度：3個圖示(62*3) + 2個間距(6*2) */
+    width: 246px; /* 固定寬度：3個圖示(78*3) + 2個間距(6*2) */
     margin-left: auto;
     margin-right: auto;
 }
-.item { width: 62px; text-align: center; cursor: pointer; border: 2px solid var(--border-color); border-radius: 10px; padding: 4px; transition: 0.2s; background-color: var(--item-bg); flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; user-select: none; }
+.item { width: 78px; text-align: center; cursor: pointer; border: 2px solid var(--border-color); border-radius: 10px; padding: 4px; transition: border-color 0.2s, background-color 0.2s, transform 0.2s, opacity 0.2s; background-color: var(--item-bg); flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; user-select: none; }
 .item:hover { border-color: var(--primary-color); transform: scale(1.05); }
 .item.unlocked { border-color: var(--success-color); background-color: var(--success-bg); }
 .item.season { border-color: var(--season-color); background-color: var(--season-bg); }
@@ -123,8 +149,36 @@ button:active, .btn-secondary:active { transform: translateY(0); }
 .pass-toggle input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 .num-field { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: bold; color: var(--text-color); }
 .num-field input { width: 62px; padding: 7px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); text-align: center; font-weight: bold; }
-.item img { width: 100%; height: auto; border-radius: 6px; aspect-ratio: 1; object-fit: contain; }
-.item div { font-size: 10px; margin-top: 3px; line-height: 1.2; word-break: break-all; font-weight: 500;}
+.item img { width: 50px; height: 50px; margin: 0 auto; border-radius: 6px; object-fit: contain; }
+/* 每一格的高度必須固定，否則同一列在不同卡片上高度不同，Lv 區塊就對不齊。
+   做法：圖固定 50px、三行字各鎖一行不換行。格寬加大到 76px 是為了讓
+   最長的幣別標籤（「季節之心: 1」/「Ascended: 250」）排得下，不必截字。 */
+.item div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item div { font-size: 10px; margin-top: 3px; line-height: 1.2; word-break: normal; font-weight: 500;}
+/* 數字那兩行縮一級：英文的「Ascended: 250」在 10px 會被截掉，數字被截比名稱被截嚴重 */
+.item div:not(.nm) { font-size: 9px; }
+
+/* --- 緊湊模式 --- */
+/* 只改尺寸，不動版面邏輯：row/col 都是 Python 算好的，這裡不碰。
+   高度的大頭是名稱那行會 break-all 折成兩行，所以緊湊模式把它壓成一行加省略號
+   （全名進 title，滑過去看），圖示 50 -> 32px。
+   單格 107 -> 74px，最長的嚮導卡（questap31）約少掉四分之一。 */
+body.compact .items-row { width: 146px; gap: 4px; }
+body.compact .item { width: 46px; padding: 3px; border-width: 1px; border-radius: 7px; }
+body.compact .item div { font-size: 9px; margin-top: 1px; line-height: 1.15; }
+/* 圖示不跟著格寬縮：格子要夠寬才塞得下「季蠟: 12」一行，但高度要靠小圖省，
+   所以這裡把圖固定 30px，不用 width:100%（一縮就是正方形，寬高一起掉）。 */
+body.compact .item img { width: 30px; height: 30px; margin: 0 auto; border-radius: 4px; }
+.item .short { display: none; }
+body.compact .item .full { display: none; }
+body.compact .item .short { display: inline; }
+body.compact .level-row { padding-top: 5px; }
+body.compact .level-block { gap: 5px; margin-bottom: 4px; }
+body.compact .lv-seg { width: 7px; margin-top: 5px; border-radius: 4px; }
+body.compact .level-label { font-size: 11px; line-height: 15px; margin-top: 2px; }
+body.compact .spirit { width: 188px; padding: 10px; }
+body.compact .spirit-image { width: 64px; height: 64px; margin-bottom: 8px; }
+body.compact .spirit-header { font-size: 14px; }
 
 /* Toast 提示條 */
 #toastContainer { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1001; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
@@ -160,7 +214,7 @@ button:active, .btn-secondary:active { transform: translateY(0); }
             <option value="en">English</option>
         </select>
     </div>
-    <div class="header-title" id="ui-title">季節先祖解鎖計算器</div>
+    <div class="header-title" id="ui-title">先靈解鎖計算器</div>
     <div class="top-controls">
         <button class="top-btn" onclick="toggleTheme()">🌓 Theme</button>
         <a href="index.html" class="top-btn">🏠 Home</a>
@@ -190,6 +244,10 @@ button:active, .btn-secondary:active { transform: translateY(0); }
         <label class="pass-toggle" id="hideRewardWrap" style="display:none">
             <input type="checkbox" id="hideRewardToggle" onchange="toggleHideReward()">
             <span id="ui-hidereward">隱藏畢業禮與季節項鍊</span>
+        </label>
+        <label class="pass-toggle">
+            <input type="checkbox" id="compactToggle" onchange="toggleCompact()">
+            <span id="ui-compact">緊湊模式</span>
         </label>
         <div class="num-field">
             <span id="ui-daily">每日季蠟</span>
@@ -221,12 +279,12 @@ button:active, .btn-secondary:active { transform: translateY(0); }
 
 <script>
 const uiDict = {
-    'zh-hant': { langLabel: '語言', title: '季節先祖解鎖計算器', home: '🏠 首頁', addProf: '➕ 新增方案', delProf: '刪除', t1: '總需求', t2: '總好感度:', t3: '已花', t4: '還需天數:', resetSeason: '重置當前季節', compExp: '陪伴好感度', resetSpirit: '重置進度', cst: '季蠟', exp: '好感', profPrompt: '請輸入自定義解鎖方案名稱：', errReq: '你還不能解鎖', errReq2: '需要總好感度達到', export: '📥 匯出', import: '📤 匯入', addExp: '增加', day: '天', guide: '(嚮導)', tierLbl: '可達等級', partialNote: '本季另有 {n} 隻舊版格式先祖尚未收錄',
-        pass: '擁有季卡且季節進行中', hideReward: '隱藏畢業禮與季節項鍊', daily: '每日季蠟', initial: '起始季蠟', noPassNote: '無季卡：季卡限定項目（含季心）無法取得', importBad: '⚠️ 匯入檔含不合法欄位，已略過' },
-    'zh': { langLabel: '语言', title: '季节先祖解锁计算器', home: '🏠 首页', addProf: '➕ 新增方案', delProf: '删除', t1: '总需求', t2: '总好感度:', t3: '已花', t4: '还需天数:', resetSeason: '重置当前季节', compExp: '陪伴好感度', resetSpirit: '重置进度', cst: '季蜡', exp: '好感', profPrompt: '请输入自定义解锁方案名称：', errReq: '你还不能解锁', errReq2: '需要总好感度达到', export: '📥 导出', import: '📤 导入', addExp: '增加', day: '天', guide: '(向导)', tierLbl: '可达等级', partialNote: '本季另有 {n} 只旧版格式先祖尚未收录',
-        pass: '拥有季卡且季节进行中', hideReward: '隐藏毕业礼与季节项链', daily: '每日季蜡', initial: '起始季蜡', noPassNote: '无季卡：季卡限定项目（含季心）无法取得', importBad: '⚠️ 导入档含不合法栏位，已略过' },
-    'en': { langLabel: 'Lang', title: 'Season Spirit Calculator', home: '🏠 Home', addProf: '➕ Add Profile', delProf: 'Delete', t1: 'Required', t2: 'Total Affection:', t3: 'Spent', t4: 'Days Left:', resetSeason: 'Reset Season', compExp: 'Companion Aff.', resetSpirit: 'Reset Progress', cst: 'Cost', exp: 'Aff.', profPrompt: 'Enter profile name:', errReq: 'Cannot unlock', errReq2: 'Requires total affection:', export: '📥 Export', import: '📤 Import', addExp: 'Add', day: 'd', guide: '(Guide)', tierLbl: 'Max tier', partialNote: '{n} more legacy-format spirits in this season are not yet included',
-        pass: 'Have Season Pass and Season In Progress', hideReward: 'Hide Season Heart items', daily: 'Candles/day', initial: 'Starting', noPassNote: 'No pass: pass-exclusive items (incl. Season Heart) are unobtainable', importBad: '⚠️ Import contained invalid keys; they were skipped' }
+    'zh-hant': { langLabel: '語言', title: '先靈解鎖計算器', home: '🏠 首頁', addProf: '➕ 新增方案', delProf: '刪除', t1: '總需求', t2: '總好感度:', t3: '已花', t4: '還需天數:', resetSeason: '重置當前季節', compExp: '陪伴好感度', resetSpirit: '重置進度', cst: '季蠟', exp: '好感', profPrompt: '請輸入自定義解鎖方案名稱：', errReq: '你還不能解鎖', errReq2: '需要總好感度達到', export: '📥 匯出', import: '📤 匯入', addExp: '增加', day: '天', guide: '(嚮導)', tierLbl: '可達等級', partialNote: '本季另有 {n} 隻舊版格式先祖尚未收錄',
+        pass: '擁有季卡且季節進行中', hideReward: '隱藏畢業禮與季節項鍊', compact: '緊湊模式', needExp: '需', daily: '每日季蠟', initial: '起始季蠟', noPassNote: '無季卡：季卡限定項目（含季心）無法取得', importBad: '⚠️ 匯入檔含不合法欄位，已略過' },
+    'zh': { langLabel: '语言', title: '先祖解锁计算器', home: '🏠 首页', addProf: '➕ 新增方案', delProf: '删除', t1: '总需求', t2: '总好感度:', t3: '已花', t4: '还需天数:', resetSeason: '重置当前季节', compExp: '陪伴好感度', resetSpirit: '重置进度', cst: '季蜡', exp: '好感', profPrompt: '请输入自定义解锁方案名称：', errReq: '你还不能解锁', errReq2: '需要总好感度达到', export: '📥 导出', import: '📤 导入', addExp: '增加', day: '天', guide: '(向导)', tierLbl: '可达等级', partialNote: '本季另有 {n} 只旧版格式先祖尚未收录',
+        pass: '拥有季卡且季节进行中', hideReward: '隐藏毕业礼与季节项链', compact: '紧凑模式', needExp: '需', daily: '每日季蜡', initial: '起始季蜡', noPassNote: '无季卡：季卡限定项目（含季心）无法取得', importBad: '⚠️ 导入档含不合法栏位，已略过' },
+    'en': { langLabel: 'Lang', title: 'Spirit Calculator', home: '🏠 Home', addProf: '➕ Add Profile', delProf: 'Delete', t1: 'Required', t2: 'Total Affection:', t3: 'Spent', t4: 'Days Left:', resetSeason: 'Reset Season', compExp: 'Companion Aff.', resetSpirit: 'Reset Progress', cst: 'Cost', exp: 'Aff.', profPrompt: 'Enter profile name:', errReq: 'Cannot unlock', errReq2: 'Requires total affection:', export: '📥 Export', import: '📤 Import', addExp: 'Add', day: 'd', guide: '(Guide)', tierLbl: 'Max tier', partialNote: '{n} more legacy-format spirits in this season are not yet included',
+        pass: 'Have Season Pass and Season In Progress', hideReward: 'Hide Season Heart items', compact: 'Compact', needExp: 'need', daily: 'Candles/day', initial: 'Starting', noPassNote: 'No pass: pass-exclusive items (incl. Season Heart) are unobtainable', importBad: '⚠️ Import contained invalid keys; they were skipped' }
 };
 
 /* --- 幣別定義：成本向量化的單一事實來源 --- */
@@ -349,7 +407,7 @@ function econKey() { return `${currentProfileId}_economy`; }
 // 「隱藏畢業禮與季節項鍊」= 用季節之心計價的全部項目（含成本 0 的項鍊）。
 // 一個季節一個開關，狀態跟經濟設定放在一起（每個分組各自記住）。
 let hideReward = false;
-function isHidden(item) { return hideReward && item.ctyp === 'season_heart'; }
+function isHidden(item) { return hideReward && !!item.rw; }   // rw 由 Python 標記
 function toggleHideReward() {
     hideReward = document.getElementById('hideRewardToggle').checked;
     const e = readEconomy();
@@ -427,6 +485,11 @@ function initApp() {
     const theme = localStorage.getItem('sky_tool_theme') || 'light';
     if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
     document.getElementById('langSelect').value = currentLang;
+    // 沒存過就看螢幕寬度決定預設：手機預設開，桌機預設關。存過就照存的。
+    const cp = localStorage.getItem('sky_tool_compact');
+    const compactOn = cp === null ? window.innerWidth < 700 : cp === '1';
+    document.body.classList.toggle('compact', compactOn);
+    document.getElementById('compactToggle').checked = compactOn;
     
     // data 與 i18n 分家：data 機器產（可隨時覆蓋），i18n 人工養（只累加）
     // 三份檔案：data 機器產（可覆蓋），i18n 與 images 人工養（只累加）
@@ -495,6 +558,15 @@ function toggleChangelog() {
         localStorage.setItem('sky_tool_changelog_collapsed', collapsed ? '1' : '0');
     }
 
+/* 緊湊模式是純顯示設定，跟方案、季節都無關，所以單獨一個全域 key，
+   不塞進 economy（那是每季各自記的）。切換只加減 class，不重繪，不碰進度。 */
+function toggleCompact() {
+    const on = document.getElementById('compactToggle').checked;
+    document.body.classList.toggle('compact', on);
+    localStorage.setItem('sky_tool_compact', on ? '1' : '0');
+    alignCardSections(document.getElementById('spiritsContainer'));  // 字級變了要重量
+}
+
 function toggleTheme() {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
@@ -517,6 +589,7 @@ function updateUIText() {
     document.getElementById('ui-del-profile').textContent = t.delProf;
     document.getElementById('ui-pass').textContent = t.pass;
     document.getElementById('ui-hidereward').textContent = t.hideReward;
+    document.getElementById('ui-compact').textContent = t.compact;
     document.getElementById('ui-daily').textContent = t.daily;
     document.getElementById('ui-initial').textContent = t.initial;
     document.getElementById('ui-reset-season').textContent = t.resetSeason;
@@ -643,7 +716,7 @@ function loadSeasonData() {
     const wrap = document.getElementById('hideRewardWrap');
     if (wrap) {
         const has = Object.values(group.spirits)
-            .some(s => s.items.some(i => i.ctyp === 'season_heart'));
+            .some(s => s.items.some(i => i.rw));
         wrap.style.display = has ? '' : 'none';
     }
 
@@ -926,6 +999,8 @@ rowCount += nonSeasonRows + seasonRows;
         
         const ancDiv = document.createElement('div');
         ancDiv.className='spirit';
+        // 嚮導自成一群對齊（它比先祖樹高一倍，拉著大家一起長會空出一大片）
+        if (spiritItems[0].spiritKind === 'guide') ancDiv.classList.add('is-guide');
 
         const imgPlaceholder = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2RkZCIvPjxwYXRoIGQ9Ik0yNSAxNWwtMTAgMTBoMjB6IiBmaWxsPSIjOTk5Ii8+PC9zdmc+';
         const img = document.createElement('img');
@@ -1042,11 +1117,8 @@ rowCount += nonSeasonRows + seasonRows;
                 const wrapper = document.createElement('div');
                 wrapper.className = 'level-row';
                 for (let rr = lo; rr <= r; rr++) wrapper.appendChild(buildLine(rr));
-                const label = document.createElement('div');
-                label.className = 'level-label';
-                label.textContent = 'Lv.' + lv;
-                wrapper.appendChild(label);
-                itemsContainer.appendChild(wrapper);
+                wrapper.appendChild(makeLevelLabel(lv, spiritItems, spiritKey, t));
+                itemsContainer.appendChild(wrapLevelBlock(wrapper, lv, spiritItems, spiritKey));
                 r = lo - 1;
             }
             ancDiv.appendChild(itemsContainer);
@@ -1068,9 +1140,8 @@ rowCount += nonSeasonRows + seasonRows;
             const levelRowWrapper = document.createElement('div');
             levelRowWrapper.className='level-row';
 
-            const label = document.createElement('div');
-            label.className='level-label';
-            label.textContent = 'Lv.' + level;
+            // label 後面還要當 insertBefore 的錨點（季節列插在標籤前），所以留著變數
+            const label = makeLevelLabel(level, spiritItems, spiritKey, t);
             levelRowWrapper.appendChild(label);
 
             let actualRowsRendered = 0; // 記錄這個先祖在這個 Level 實際畫了幾行
@@ -1136,7 +1207,7 @@ rowCount += nonSeasonRows + seasonRows;
             } else {
                 // 如果這個先祖沒有這個 Level，把線條和字隱藏，但保留 DOM 結構
                 label.style.visibility = 'hidden';
-                levelRowWrapper.style.borderTopColor = 'transparent';
+                levelRowWrapper.dataset.empty = '1';   // 邊框現在在外層 .level-block 上，包完才處理
             }
 
             // --- 核心：補齊缺失的行數 (Invisible Padding) ---
@@ -1153,7 +1224,7 @@ rowCount += nonSeasonRows + seasonRows;
                 emptyRow.innerHTML = `
                     <div class="item" style="border-color:transparent; background:transparent; box-shadow:none;">
                         <img src="${imgPlaceholder}">
-                        <div>_</div>
+                        <div class="nm">_</div>
                         <div>_</div>
                         <div>_</div>
                     </div>
@@ -1161,13 +1232,47 @@ rowCount += nonSeasonRows + seasonRows;
                 levelRowWrapper.insertBefore(emptyRow, label);
             }
 
-            itemsContainer.appendChild(levelRowWrapper);
+            const block = wrapLevelBlock(levelRowWrapper, level, spiritItems, spiritKey);
+            if (levelRowWrapper.dataset.empty) {
+                // 這隻沒有這一層，整塊只是為了跟同季其他卡對齊而留的空白：
+                // 分隔線與進度條都不該出現
+                block.style.borderTopColor = 'transparent';
+                block.querySelector('.lv-seg').style.visibility = 'hidden';
+            }
+            itemsContainer.appendChild(block);
         });
         
         ancDiv.appendChild(itemsContainer);
 
         renderFooter(ancDiv, spiritKey, spiritItems, totals, t);
         container.appendChild(ancDiv);
+    });
+
+    alignCardSections(container);   // 全部塞進 DOM 之後才量得到高度
+}
+
+/* 把同一群卡片的「名稱列」「控制列」「footer」補到一樣高，並把整張卡設成同高，
+   讓兌換樹從同一條線開始、footer 落在同一條線上。
+   高度差的來源有二：先祖名字長短不一會折行；嚮導與長老沒有陪伴輸入框，
+   控制列比別人矮一截。這兩個純 CSS 補不了（要的是「同組裡最高的那個」），
+   所以量一次再寫回 min-height。每次重繪跑一次，先清空再量，避免越量越高。
+   footer 也一起補：它靠 margin-top:auto 貼底，高度不同時下緣齊、上緣會差一行。 */
+function alignCardSections(container){
+    // 先祖樹與嚮導分兩群，各自齊平；兩群之間不互相牽動
+    [[...container.querySelectorAll('.spirit:not(.is-guide)')],
+     [...container.querySelectorAll('.spirit.is-guide')]].forEach(cards => {
+        if (!cards.length) return;
+        ['.spirit-header', '.spirit-controls', '.spirit-footer'].forEach(sel => {
+            const els = cards.map(c => c.querySelector(sel)).filter(Boolean);
+            if (!els.length) return;
+            els.forEach(e => { e.style.minHeight = ''; });
+            const h = Math.max(...els.map(e => e.getBoundingClientRect().height));
+            els.forEach(e => { e.style.minHeight = h + 'px'; });
+        });
+        // 區塊補完高度才量得準：卡片等高 -> footer 的 margin-top:auto 自動對齊下緣
+        cards.forEach(c => { c.style.height = ''; });
+        const H = Math.max(...cards.map(c => c.getBoundingClientRect().height));
+        cards.forEach(c => { c.style.height = H + 'px'; });
     });
 }
 
@@ -1201,6 +1306,56 @@ function renderFooter(ancDiv, spiritKey, spiritItems, totals, t){
     ancDiv.appendChild(footer);
 }
 
+/* 把一個 Lv 區塊包成「左進度條 + 右內容」。
+   區段的區間是 [本層門檻, 下一層門檻]：填滿的那一刻剛好就是升到下一層的那一刻，
+   所以整張卡由下往上看，填充的頂端就是你目前好感度所在的位置。
+   Lv.1 沒有門檻，下界取 0；最高層沒有下一個門檻，達到即視為滿。 */
+function wrapLevelBlock(levelRow, level, spiritItems, spiritKey){
+    const block = document.createElement('div');
+    block.className = 'level-block';
+    const seg = document.createElement('div');
+    seg.className = 'lv-seg';
+    const fill = document.createElement('i');
+
+    const need = calcspiritLevels(spiritItems);
+    const cur  = calcspiritCurrentExp(spiritKey, spiritItems);
+    const lo   = level <= 1 ? 0 : (need[level] !== undefined ? need[level] : 0);
+    const hi   = need[level + 1];
+    let pct;
+    if (hi === undefined || hi <= lo) pct = cur >= lo ? 100 : 0;
+    else pct = Math.max(0, Math.min(1, (cur - lo) / (hi - lo))) * 100;
+
+    fill.style.height = pct + '%';
+    if (pct >= 100) fill.className = 'done';
+    else if (pct > 0) fill.className = 'now';
+    seg.title = hi === undefined ? `Lv.${level}` : `Lv.${level} → Lv.${level + 1}: ${Math.round(cur)} / ${hi}`;
+
+    seg.appendChild(fill);
+    block.appendChild(seg);
+    block.appendChild(levelRow);
+    return block;
+}
+
+/* 等級標籤：Lv.N 後面直接標出升到這一層所需的總好感度。
+   原本這個數字只有在使用者點了超過可達等級的項目時，才會從 alert 跳出來；
+   標在標籤上就不用先踩錯誤才知道門檻。
+   Lv.1 沒有門檻（calcspiritLevels 從 2 起算），所以只有層名。
+   已達成的畫成綠色，沒達成的沿用 muted —— 一眼看出卡在哪一層。 */
+function makeLevelLabel(level, spiritItems, spiritKey, t){
+    const label = document.createElement('div');
+    label.className = 'level-label';
+    label.textContent = 'Lv.' + level;
+    const need = calcspiritLevels(spiritItems)[level];
+    if (need !== undefined) {
+        const span = document.createElement('span');
+        span.className = 'lv-need';
+        span.textContent = ` ${t.needExp} ${need}`;
+        if (calcspiritCurrentExp(spiritKey, spiritItems) >= need) span.classList.add('met');
+        label.appendChild(span);
+    }
+    return label;
+}
+
 function createItemDiv(item, spiritItems, spiritKey, t){
     const div = document.createElement('div');
     div.className = 'item';
@@ -1214,16 +1369,35 @@ function createItemDiv(item, spiritItems, spiritKey, t){
     // 以 DOM API 建構，避免把資料欄位直接拼進 innerHTML
     const img = document.createElement('img');
     img.className = 'item-img';
-    const frames = Array.isArray(item.image) ? item.image : null;
-    img.src = firstFrame(item.image) || placeholder;
+    // 有「開啟態」的類別（目前只有等級解鎖）勾選後換圖；點擊會整個 updateUI 重繪
+    const openImg = item.unlocked ? imageData[`item.${item.k}.open`] : null;
+    const frames = !openImg && Array.isArray(item.image) ? item.image : null;
+    img.src = openImg || firstFrame(item.image) || placeholder;
     img.onerror = () => { img.src = placeholder; };
     div.appendChild(img);
     if (frames && frames.length > 1) registerAnimation(img, frames);
 
-    const line = (txt) => { const d = document.createElement('div'); d.textContent = txt; div.appendChild(d); };
-    line(item.nm);
-    line(`${curLabel(currencyOf(item))}: ${item.cst}`);
-    line(`${t.exp}: ${item.exp}`);
+    // 名稱那行掛 class：緊湊模式要單獨把它壓成一行（CSS .item .nm）
+    const line = (txt, cls) => {
+        const d = document.createElement('div');
+        d.textContent = txt;
+        if (cls) d.className = cls;
+        div.appendChild(d);
+    };
+    // 數字那兩行同時放「完整」與「縮寫」兩版，用 CSS 切（見 body.compact .full/.short）。
+    // 縮寫版是為了讓 46px 的格子一行放得下：「季節之心: 2」會折行，「💙2」不會。
+    const numLine = (full, short) => {
+        const d = document.createElement('div');
+        const a = document.createElement('span'); a.className = 'full'; a.textContent = full;
+        const b = document.createElement('span'); b.className = 'short'; b.textContent = short;
+        d.append(a, b);
+        div.appendChild(d);
+    };
+    const cur = currencyOf(item);
+    line(item.nm, 'nm');
+    numLine(`${curLabel(cur)}: ${item.cst}`, `${(CURRENCIES[cur] || {}).icon || ''}${item.cst}`);
+    numLine(`${t.exp}: ${item.exp}`, `♡${item.exp}`);
+    div.title = item.nm;                  // 緊湊模式名稱被截斷，全名靠 tooltip
 
     if(locked){
         div.title = t.noPassNote;

@@ -1,0 +1,17 @@
+# origin data
+*.log
+manifest.json
+
+# 產生物
+order_skeleton.json
+
+# Python
+__pycache__/
+*.pyc
+*.py
+# 機密與雜項
+.env
+.env.*
+Thumbs.db
+.DS_Store
+use.txt
