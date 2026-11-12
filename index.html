@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>先靈解鎖計算器 | Spirit Calculator</title>
+<title>季節解鎖計算器 | Season Spirit Calculator</title>
 
 <style>
 /* --- CSS 變數：輕鬆管理亮/暗色主題 --- */
@@ -17,31 +17,64 @@
     --primary-color: #66a6ff;
     --primary-hover: #5597f0;
     --danger-color: #e74c3c;
-    --success-color: #4CAF50;
-    --success-bg: #e7fbe7;
-    --season-color: #ff9800;
-    --season-bg: #fff3e0;
+    --success-color: #4a9ed4;
+    --success-bg: #eef6fc;
+    --season-color: #3b82f6;
+    --season-bg: #e6eefd;
     --item-bg: #fdfdfd;
+    --icon-bg: #f3f5f8;
+    --icon-border: rgba(0,0,0,0.04);
     --shadow: 0 4px 12px rgba(0,0,0,0.08);
+
+
+    /* ── 語意層 ──────────────────────────────────────────────
+       上面是色盤（這是什麼顏色），這裡是語意（這個顏色拿來做什麼）。
+       規則一律只引用語意層，不要直接用 --border-color。
+
+       原本 --border-color 一個人扮演四種角色（外框／分隔線／軌道／
+       表單框），想單獨調整其中一種就只能改全部，或在規則裡寫死色碼。
+       拆開之後各改各的；預設值全部指回色盤，所以拆的當下零視覺變化。
+
+       要換色就在這裡覆寫，深色主題同理（[data-theme="dark"] 裡）。      */
+    --outline:      var(--border-color);  /* 儀表板與卡片外框、先祖頭像圈 */
+    --divider:      var(--border-color);  /* 區塊之間的分隔線（含虛線） */
+    --track:        var(--border-color);  /* 進度條底槽、Lv 進度條、捲軸 */
+    --field-border: var(--border-color);  /* select / input / total-tag 的框 */
+    --field-bg:     var(--bg-color);      /* 同上的底色 */
+    --footer-bg:    var(--bg-color);      /* 卡片底部的小計區 */
+    --footer-text:  var(--text-muted);
+    /* .item 的框。沒有這一行，.item 規則裡的 var(--item-border) 會解不出來，
+       整條 border shorthand 退回初始值（border-style: none），框會直接消失。 */
+    --item-border:  var(--border-color);
+    --item-shadow:       0 1px 2px rgba(0,0,0,0.06);   /* 靜止：貼在底上 */
+    --item-shadow-hover: 0 6px 14px rgba(0,0,0,0.18);  /* 浮起 */
+    /* --item-bg 與 --season-* 本來就是語意層，直接用 */
 }
 
 [data-theme="dark"] {
-    --bg-color: #1a1a20;
-    --text-color: #f0f0f0;
-    --text-muted: #aaa;
-    --card-bg: #2a2a35;
-    --header-bg: linear-gradient(135deg, #1e3c72, #2a5298);
-    --border-color: #444;
-    --primary-color: #4e8cf5;
-    --item-bg: #33333e;
-    --success-color: #f39c12;
-    --success-bg: #4a3b22;
-    --season-color: #d35400;
-    --season-bg: #5a2e15;
-    --shadow: 0 4px 12px rgba(0,0,0,0.3);
+    /* 配色取自檔案 2：深紫黑底 #0c0818；強調色由淺紫(#b892ff)改為淺藍 */
+    --bg-color: #0c0818;
+    --text-color: #efeaf8;
+    --text-muted: #a49cb8;
+    --card-bg: #130e23;
+    --header-bg: linear-gradient(135deg, #14102a, #1d2a52);
+    --border-color: #2c2542;
+    --primary-color: #7cc4ff;
+    --primary-hover: #9bd2ff;
+    --item-bg: #0f0a1d;
+    --success-color: #4a9ed4;
+    --success-bg: #07121f;
+    --season-color: #3d8bff;
+    --season-bg: #0a1d4a;
+    --icon-bg: #030913;
+    --icon-border: rgba(120,170,230,0.10);
+    --shadow: 0 4px 12px rgba(0,0,0,0.45);
+    --item-shadow:       0 1px 2px rgba(0,0,0,0.5);
+    --item-shadow-hover: 0 6px 16px rgba(0,0,0,0.65);
 }
 
 * { box-sizing: border-box; }
+/* ═══ 版面骨架：頁面、頁首、右上角控制列 ═══ */
 body { font-family: "Segoe UI", -apple-system, sans-serif; background-color: var(--bg-color); margin: 0; padding: 0; color: var(--text-color); transition: background-color 0.3s, color 0.3s; }
 
 /* --- 頂部導航列 (Flexbox 修復手機版重疊問題) --- */
@@ -57,69 +90,87 @@ header {
 .top-select option { background: #333; color: #fff; }
 
 /* --- 主控台面版 --- */
-.dashboard { background-color: var(--card-bg); padding: 20px; margin: 20px auto; width: 95%; max-width: 850px; border-radius: 16px; box-shadow: var(--shadow); border: 1px solid var(--border-color); transition: 0.3s; }
-.profile-section { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; }
-.profile-section select { padding: 8px; border-radius: 8px; border: 1px solid var(--border-color); outline: none; background: var(--bg-color); color: var(--text-color); font-weight: bold; }
+/* ═══ 儀表板：方案、總計、進度條、全域控制列 ═══ */
+.dashboard { background-color: var(--card-bg); padding: 20px; margin: 20px auto; width: 95%; max-width: 850px; border-radius: 16px; box-shadow: var(--shadow); border: 1px solid var(--outline); transition: 0.3s; }
+.profile-section { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--divider); flex-wrap: wrap; }
+.profile-section select { padding: 8px; border-radius: 8px; border: 1px solid var(--field-border); outline: none; background: var(--field-bg); color: var(--text-color); font-weight: bold; }
 
 /* --- 優化數據面板 (標籤化) --- */
 .totals { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 12px; font-size: 13px; font-weight: bold; margin-bottom: 15px; color: var(--text-muted);}
-.total-tag { display: flex; align-items: center; background: var(--bg-color); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color); }
+.total-tag { display: flex; align-items: center; background: var(--field-bg); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--field-border); }
 .totals span { font-weight: 900; color: var(--success-color); font-size: 15px; margin-left: 6px; }
 
 /* 進度條 */
-.progress-container { width: 100%; height: 10px; background: var(--border-color); border-radius: 5px; overflow: hidden; margin: 15px 0; }
+.progress-container { width: 100%; height: 10px; background: var(--track); border-radius: 5px; overflow: hidden; margin: 15px 0; }
 .progress-bar { height: 100%; background: var(--success-color); width: 0%; transition: width 0.5s ease; }
 
-.global-controls { display: flex; justify-content: center; gap: 10px; align-items: center; flex-wrap: wrap; padding-top: 10px; border-top: 1px dashed var(--border-color); }
-.global-controls select { padding: 8px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 14px; outline: none; background: var(--bg-color); color: var(--text-color); font-weight: bold; }
+.global-controls { display: flex; justify-content: center; gap: 10px; align-items: center; flex-wrap: wrap; padding-top: 10px; border-top: 1px dashed var(--divider); }
+.global-controls select { padding: 8px; border-radius: 8px; border: 1px solid var(--field-border); font-size: 14px; outline: none; background: var(--field-bg); color: var(--text-color); font-weight: bold; }
 
+/* ═══ 按鈕與表單控制項 ═══ */
 button, .btn-secondary { background-color: var(--primary-color); color: white; border: none; border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; transition: 0.2s; font-weight: bold; text-decoration: none; }
 button:hover, .btn-secondary:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
 button:active, .btn-secondary:active { transform: translateY(0); }
 .btn-secondary { background-color: #888; }
 .btn-reset { background-color: var(--danger-color); }
+.pass-note { font-size: 11px; color: var(--danger-color); font-weight: bold; text-align: center; width: 100%; margin-top: 6px; line-height: 1.4; }
+.pass-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: bold; color: var(--text-color); }
+.pass-toggle input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+.num-field { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: bold; color: var(--text-color); }
+.num-field input { width: 62px; padding: 7px; border-radius: 8px; border: 1px solid var(--field-border); background: var(--field-bg); color: var(--text-color); text-align: center; font-weight: bold; }
 
+/* ═══ 先祖卡片：容器、卡片、頭像、控制列、footer ═══ */
 /* --- 先祖卡片區塊 --- */
 /* align-items:flex-start -> flex 不管高度，改由 alignCardSections() 分群指定：
    先祖樹一群、嚮導一群，各自齊平。不能用 stretch，因為 flex 行高取決於
    「該行最高的那一張」，嚮導（questap29 有 12 個任務）在場時所有卡都會被拉到它那麼高。 */
 /* 卡片排成一條水平帶、左右捲動。原本是 flex-wrap:wrap，手機一列只塞得下一張，
    一季五隻就要往下捲八個螢幕。改成不換行之後，頁高＝最高的那張卡。
-   scroll-snap 讓手指滑動停在卡片邊界，不會停在兩張中間。
+   不吸附：使用者要能停在兩張卡之間，所以沒有 scroll-snap-type / scroll-snap-align。
+   （scroll-padding-left 也一併拿掉，它只對吸附與 scrollIntoView 有意義。）
+   overscroll-behavior-x: contain 留著 —— 它擋的是瀏覽器的左滑返回手勢，跟吸附無關。
    justify-content 的 safe：卡片塞得下時置中，塞不下時自動退回 flex-start。
    不能只寫 center —— 溢出時 center 會把第一張切掉一半，而且捲不回去
    （捲動區取不到負的溢出區）。不支援 safe 的舊瀏覽器會整條宣告丟掉，
    退回預設的 flex-start，也就是靠左，不會壞掉。 */
 #spiritsContainer { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 20px; padding: 15px; margin: 0 auto; max-width: 1800px;
   justify-content: safe center;
-  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-left: 15px; }
+  overflow-x: auto; overscroll-behavior-x: contain; }
 #spiritsContainer::-webkit-scrollbar { height: 10px; }
-#spiritsContainer::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 5px; }
-.spirit { display: flex; flex-direction: column; align-items: center; border: 1px solid var(--border-color); border-radius: 16px; padding: 12px; width: 292px; flex: 0 0 auto; scroll-snap-align: start; box-shadow: 0 2px 8px rgba(0,0,0,0.05); background-color: var(--card-bg);
+#spiritsContainer::-webkit-scrollbar-thumb { background: var(--track); border-radius: 5px; }
+.spirit { display: flex; flex-direction: column; align-items: center; border: 1px solid var(--outline); border-radius: 16px; padding: 12px; width: 292px; flex: 0 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,0.05); background-color: var(--card-bg);
   /* 不要寫成 transition: 0.3s（= all）：卡片高度由 JS 量完寫回，
      高度一旦有過渡動畫，下一次量到的就是動畫中途的值（實測會差 16px）。 */
   transition: box-shadow 0.3s, border-color 0.3s, transform 0.3s, background-color 0.3s; }
 .spirit:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: var(--primary-color); }
-.spirit-image { width: 85px; height: 85px; border-radius: 50%; margin-bottom: 10px; border: 3px solid var(--border-color); object-fit: cover; background: rgba(0,0,0,0.05); }
+.spirit-image { width: 85px; height: 85px; border-radius: 50%; margin-bottom: 10px; border: 3px solid var(--outline); object-fit: cover; background: rgba(0,0,0,0.05); }
 .spirit-header { font-size: 16px; font-weight: bold; margin-bottom: 8px; color: var(--text-color); text-align: center; } 
-.spirit-footer { font-size: 12px; color: var(--text-muted); text-align: center; line-height: 1.6; background: var(--bg-color); padding: 8px; border-radius: 8px; width: 100%; }
+.spirit-footer { font-size: 12px; color: var(--footer-text); text-align: center; line-height: 1.6; background: var(--footer-bg); padding: 8px; border-radius: 8px; width: 100%; }
 /* auto 吃掉卡片剩下的垂直空間 -> footer 貼在最下緣。
    卡片被 stretch 拉到同高後，矮卡多出來的空間就落在這裡。 */
 .spirit > .spirit-footer { margin-top: auto; }
 
-.spirit-controls { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; border-top: 1px dashed var(--border-color); width: 100%; font-size: 13px; }
+.spirit-controls { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; border-top: 1px dashed var(--divider); width: 100%; font-size: 13px; }
 .input-group { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%;}
-.spirit-controls input[type="number"] { width: 45px; padding: 4px; font-size: 13px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-color); color: var(--text-color); text-align: center; }
+.spirit-controls input[type="number"] { width: 45px; padding: 4px; font-size: 13px; border: 1px solid var(--field-border); border-radius: 6px; background: var(--field-bg); color: var(--text-color); text-align: center; }
 
 /* 每個 Lv 區塊 = 左邊一小段好感度進度條 + 右邊原本的那堆列。
    進度條刻意切成一段一段掛在各區塊上，高度由 flex 自動等於該區塊，
    所以不用量 getBoundingClientRect、不用 ResizeObserver，
    換語言／切緊湊模式／字型載入造成的高度變化都會自動跟上。 */
-.level-block { display: flex; align-items: stretch; gap: 8px; width: 100%; margin-bottom: 6px; border-top: 1px solid var(--border-color); }
+/* ═══ 兌換樹：Lv 區塊、進度條、標籤、格子 ═══ */
+.level-block { display: flex; align-items: stretch; gap: 8px; width: 100%; margin-bottom: 6px; border-top: 1px solid var(--divider); }
 .level-row { display: flex; flex-direction: column-reverse; align-items: center; padding-top: 8px; flex: 1 1 auto; min-width: 0; }
-.lv-seg { position: relative; width: 10px; flex: 0 0 auto; margin-top: 8px; border-radius: 5px; background: var(--border-color); opacity: 0.45; }
+.lv-seg { position: relative; width: 10px; flex: 0 0 auto; margin-top: 8px; border-radius: 5px; background: color-mix(in srgb, var(--track) 45%, transparent); }
 /* 填充由下往上，對應「好感度從這層的門檻往下一層累積」 */
-.lv-seg > i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 5px; display: block; }
+.lv-seg > i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 5px; display: block;
+    transition: height 0.7s cubic-bezier(.22,1,.36,1), background-color 0.4s; }
+/* 填充前端的即時好感度標籤：掛在填充頂端，隨高度動畫一起上下移動 */
+.lv-now { position: absolute; left: 50%; top: 0; transform: translate(-50%, -50%); z-index: 3; pointer-events: none;
+    font-size: 9px; font-weight: 700; line-height: 1; padding: 2px 4px; border-radius: 8px; white-space: nowrap;
+    background: var(--card-bg); color: var(--primary-color); border: 1px solid var(--primary-color);
+    box-shadow: 0 0 8px -2px var(--primary-color); font-variant-numeric: tabular-nums; }
+body.compact .lv-now { font-size: 8px; padding: 1px 3px; }
 .lv-seg > i.done { background: var(--success-color); }
 .lv-seg > i.now  { background: var(--primary-color); }
 /* 行高寫死：標籤有沒有掛「需 N」那個 span 會讓行框差 2px（bold 與 500 的字體度量不同），
@@ -137,19 +188,26 @@ button:active, .btn-secondary:active { transform: translateY(0); }
     margin-left: auto;
     margin-right: auto;
 }
-.item { width: 78px; text-align: center; cursor: pointer; border: 2px solid var(--border-color); border-radius: 10px; padding: 4px; transition: border-color 0.2s, background-color 0.2s, transform 0.2s, opacity 0.2s; background-color: var(--item-bg); flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; user-select: none; }
-.item:hover { border-color: var(--primary-color); transform: scale(1.05); }
+.item { width: 78px; text-align: center; cursor: pointer; border: 1px solid var(--item-border); border-radius: 14px; padding: 4px;
+  position: relative; box-shadow: var(--item-shadow);
+  transition: border-color 0.2s, background-color 0.2s, transform 0.2s, opacity 0.2s, box-shadow 0.2s; background-color: var(--item-bg); flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; user-select: none; }
+/* hover 只給真的有滑鼠的裝置。觸控螢幕上 :hover 會在點完之後「黏住」——
+   手指早就移開，那一格還維持浮起，直到點別的地方。
+   浮起用 transform + box-shadow，兩者都不參與版面計算，不會推開鄰居；
+   原本的 scale(1.05) 會讓格子長大壓到旁邊那格。 */
+@media (hover: hover) {
+    .item:hover { border-color: var(--primary-color); transform: translateY(-3px);
+                  box-shadow: var(--item-shadow-hover); z-index: 1; }
+    .item.locked:hover { border-color: var(--item-border); transform: none;
+                         box-shadow: var(--item-shadow); }
+}
+/* 按下去的回饋，觸控也吃得到 */
+.item:active { transform: translateY(-1px); box-shadow: var(--item-shadow); }
 .item.unlocked { border-color: var(--success-color); background-color: var(--success-bg); }
-.item.season { border-color: var(--season-color); background-color: var(--season-bg); }
-.item.unlocked.season { border-color: var(--success-color); background-color: var(--success-bg); }
+.item.season { border-color: var(--season-color); background-color: var(--season-bg); border-style: dashed; box-shadow: 0 0 0 1px var(--season-color), 0 0 10px -2px var(--season-color); }
+.item.unlocked.season { border-color: var(--success-color); background-color: var(--success-bg); border-style: solid; box-shadow: var(--item-shadow); }
 .item.locked { opacity: 0.35; filter: grayscale(1); cursor: not-allowed; }
-.item.locked:hover { border-color: var(--border-color); transform: none; }
-.pass-note { font-size: 11px; color: var(--danger-color); font-weight: bold; text-align: center; width: 100%; margin-top: 6px; line-height: 1.4; }
-.pass-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: bold; color: var(--text-color); }
-.pass-toggle input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
-.num-field { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: bold; color: var(--text-color); }
-.num-field input { width: 62px; padding: 7px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); text-align: center; font-weight: bold; }
-.item img { width: 50px; height: 50px; margin: 0 auto; border-radius: 6px; object-fit: contain; }
+.item img { width: 50px; height: 50px; margin: 0 auto; padding: 4px; border-radius: 12px; object-fit: contain; background: var(--icon-bg); border: 1px solid var(--icon-border); }
 /* 每一格的高度必須固定，否則同一列在不同卡片上高度不同，Lv 區塊就對不齊。
    做法：圖固定 50px、三行字各鎖一行不換行。格寬加大到 76px 是為了讓
    最長的幣別標籤（「季節之心: 1」/「Ascended: 250」）排得下，不必截字。 */
@@ -158,17 +216,19 @@ button:active, .btn-secondary:active { transform: translateY(0); }
 /* 數字那兩行縮一級：英文的「Ascended: 250」在 10px 會被截掉，數字被截比名稱被截嚴重 */
 .item div:not(.nm) { font-size: 9px; }
 
+/* ═══ 緊湊模式：只改尺寸，版面邏輯不動 ═══ */
 /* --- 緊湊模式 --- */
 /* 只改尺寸，不動版面邏輯：row/col 都是 Python 算好的，這裡不碰。
    高度的大頭是名稱那行會 break-all 折成兩行，所以緊湊模式把它壓成一行加省略號
    （全名進 title，滑過去看），圖示 50 -> 32px。
    單格 107 -> 74px，最長的嚮導卡（questap31）約少掉四分之一。 */
 body.compact .items-row { width: 146px; gap: 4px; }
-body.compact .item { width: 46px; padding: 3px; border-width: 1px; border-radius: 7px; }
+body.compact .item { width: 46px; padding: 3px; border-radius: 10px; }
+@media (hover: hover) { body.compact .item:hover { transform: translateY(-2px); } }
 body.compact .item div { font-size: 9px; margin-top: 1px; line-height: 1.15; }
 /* 圖示不跟著格寬縮：格子要夠寬才塞得下「季蠟: 12」一行，但高度要靠小圖省，
    所以這裡把圖固定 30px，不用 width:100%（一縮就是正方形，寬高一起掉）。 */
-body.compact .item img { width: 30px; height: 30px; margin: 0 auto; border-radius: 4px; }
+body.compact .item img { width: 30px; height: 30px; margin: 0 auto; padding: 2px; border-radius: 8px; }
 .item .short { display: none; }
 body.compact .item .full { display: none; }
 body.compact .item .short { display: inline; }
@@ -214,7 +274,7 @@ body.compact .spirit-header { font-size: 14px; }
             <option value="en">English</option>
         </select>
     </div>
-    <div class="header-title" id="ui-title">先靈解鎖計算器</div>
+    <div class="header-title" id="ui-title">季節先祖解鎖計算器</div>
     <div class="top-controls">
         <button class="top-btn" onclick="toggleTheme()">🌓 Theme</button>
         <a href="index.html" class="top-btn">🏠 Home</a>
@@ -286,6 +346,7 @@ const uiDict = {
     'en': { langLabel: 'Lang', title: 'Spirit Calculator', home: '🏠 Home', addProf: '➕ Add Profile', delProf: 'Delete', t1: 'Required', t2: 'Total Affection:', t3: 'Spent', t4: 'Days Left:', resetSeason: 'Reset Season', compExp: 'Companion Aff.', resetSpirit: 'Reset Progress', cst: 'Cost', exp: 'Aff.', profPrompt: 'Enter profile name:', errReq: 'Cannot unlock', errReq2: 'Requires total affection:', export: '📥 Export', import: '📤 Import', addExp: 'Add', day: 'd', guide: '(Guide)', tierLbl: 'Max tier', partialNote: '{n} more legacy-format spirits in this season are not yet included',
         pass: 'Have Season Pass and Season In Progress', hideReward: 'Hide Season Heart items', compact: 'Compact', needExp: 'need', daily: 'Candles/day', initial: 'Starting', noPassNote: 'No pass: pass-exclusive items (incl. Season Heart) are unobtainable', importBad: '⚠️ Import contained invalid keys; they were skipped' }
 };
+
 
 /* --- 幣別定義：成本向量化的單一事實來源 --- */
 const CURRENCIES = {
@@ -1325,9 +1386,36 @@ function wrapLevelBlock(levelRow, level, spiritItems, spiritKey){
     if (hi === undefined || hi <= lo) pct = cur >= lo ? 100 : 0;
     else pct = Math.max(0, Math.min(1, (cur - lo) / (hi - lo))) * 100;
 
-    fill.style.height = pct + '%';
+    // 整張樹每次點擊都會重建 DOM，CSS transition 沒有「舊狀態」可以接，
+    // 所以把上一次的高度／好感度記在全域，新元素先以舊值出生，下一幀再切到新值。
+    window.__lvAnim = window.__lvAnim || {};
+    const akey = spiritKey + '|' + level;
+    const prev = window.__lvAnim[akey] || { pct: 0, cur: 0 };
+    window.__lvAnim[akey] = { pct, cur };
+    fill.style.height = prev.pct + '%';
     if (pct >= 100) fill.className = 'done';
     else if (pct > 0) fill.className = 'now';
+    // 目前好感度落在這一層的區間內，才在這一段的填充前端顯示數字
+    const hasFront = cur >= lo && (hi === undefined || cur < hi);
+    let pill = null;
+    if (hasFront) {
+        pill = document.createElement('span');
+        pill.className = 'lv-now';
+        pill.textContent = Math.round(prev.cur);
+        fill.appendChild(pill);
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        fill.style.height = pct + '%';
+        if (pill) {
+            const from = prev.cur, to = cur, t0 = performance.now(), dur = 700;
+            const tick = now => {
+                const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+                pill.textContent = Math.round(from + (to - from) * e);
+                if (k < 1 && pill.isConnected) requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+        }
+    }));
     seg.title = hi === undefined ? `Lv.${level}` : `Lv.${level} → Lv.${level + 1}: ${Math.round(cur)} / ${hi}`;
 
     seg.appendChild(fill);

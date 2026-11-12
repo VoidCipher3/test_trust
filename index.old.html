@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>季節解鎖計算器 | Season Spirit Calculator</title>
+
+<style>
+/* --- CSS 變數：輕鬆管理亮/暗色主題 --- */
+:root {
+    --bg-color: #f4f6f8;
+    --text-color: #333;
+    --text-muted: #666;
+    --card-bg: #ffffff;
+    --header-bg: linear-gradient(135deg, #66a6ff, #89f7fe);
+    --border-color: #e0e0e0;
+    --primary-color: #66a6ff;
+    --primary-hover: #5597f0;
+    --danger-color: #e74c3c;
+    --success-color: #4CAF50;
+    --success-bg: #e7fbe7;
+    --season-color: #ff9800;
+    --season-bg: #fff3e0;
+    --item-bg: #fdfdfd;
+    --shadow: 0 4px 12px rgba(0,0,0,0.08);
+
+
+    /* ── 語意層 ──────────────────────────────────────────────
+       上面是色盤（這是什麼顏色），這裡是語意（這個顏色拿來做什麼）。
+       規則一律只引用語意層，不要直接用 --border-color。
+
+       原本 --border-color 一個人扮演四種角色（外框／分隔線／軌道／
+       表單框），想單獨調整其中一種就只能改全部，或在規則裡寫死色碼。
+       拆開之後各改各的；預設值全部指回色盤，所以拆的當下零視覺變化。
+
+       要換色就在這裡覆寫，深色主題同理（[data-theme="dark"] 裡）。      */
+    --outline:      var(--border-color);  /* 儀表板與卡片外框、先祖頭像圈 */
+    --divider:      var(--border-color);  /* 區塊之間的分隔線（含虛線） */
+    --track:        var(--border-color);  /* 進度條底槽、Lv 進度條、捲軸 */
+    --field-border: var(--border-color);  /* select / input / total-tag 的框 */
+    --field-bg:     var(--bg-color);      /* 同上的底色 */
+    --footer-bg:    var(--bg-color);      /* 卡片底部的小計區 */
+    --footer-text:  var(--text-muted);
+    /* .item 的框。沒有這一行，.item 規則裡的 var(--item-border) 會解不出來，
+       整條 border shorthand 退回初始值（border-style: none），框會直接消失。 */
+    --item-border:  var(--border-color);
+    --item-shadow:       0 1px 2px rgba(0,0,0,0.06);   /* 靜止：貼在底上 */
+    --item-shadow-hover: 0 6px 14px rgba(0,0,0,0.18);  /* 浮起 */
+    /* --item-bg 與 --season-* 本來就是語意層，直接用 */
+}
+
+[data-theme="dark"] {
+    --bg-color: #1a1a20;
+    --text-color: #f0f0f0;
+    --text-muted: #aaa;
+    --card-bg: #2a2a35;
+    --header-bg: linear-gradient(135deg, #1e3c72, #2a5298);
+    --border-color: #444;
+    --primary-color: #4e8cf5;
+    --item-bg: #33333e;
+    --success-color: #f39c12;
+    --success-bg: #4a3b22;
+    --season-color: #d35400;
+    --season-bg: #5a2e15;
+    --shadow: 0 4px 12px rgba(0,0,0,0.3);
+    --item-shadow:       0 1px 2px rgba(0,0,0,0.35);
+    --item-shadow-hover: 0 6px 16px rgba(0,0,0,0.55);
+}
+
+* { box-sizing: border-box; }
+/* ═══ 版面骨架：頁面、頁首、右上角控制列 ═══ */
+body { font-family: "Segoe UI", -apple-system, sans-serif; background-color: var(--bg-color); margin: 0; padding: 0; color: var(--text-color); transition: background-color 0.3s, color 0.3s; }
+
+/* --- 頂部導航列 (Flexbox 修復手機版重疊問題) --- */
+header { 
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; 
+    background: var(--header-bg); color: #fff; padding: 15px 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); gap: 10px;
+}
+.header-title { flex: 1; font-size: 20px; font-weight: bold; letter-spacing: 1px; text-align: center; min-width: 200px; order: 0;}
+.top-controls, .top-left-controls { display: flex; gap: 8px; align-items: center; }
+.lang-label { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.9); display: none;}
+.top-btn, .top-select { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 6px 12px; border-radius: 20px; cursor: pointer; font-size: 12px; transition: 0.2s; outline: none; backdrop-filter: blur(4px); }
+.top-btn:hover, .top-select:hover { background: rgba(255,255,255,0.4); }
+.top-select option { background: #333; color: #fff; }
+
+/* --- 主控台面版 --- */
+/* ═══ 儀表板：方案、總計、進度條、全域控制列 ═══ */
+.dashboard { background-color: var(--card-bg); padding: 20px; margin: 20px auto; width: 95%; max-width: 850px; border-radius: 16px; box-shadow: var(--shadow); border: 1px solid var(--outline); transition: 0.3s; }
+.profile-section { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--divider); flex-wrap: wrap; }
+.profile-section select { padding: 8px; border-radius: 8px; border: 1px solid var(--field-border); outline: none; background: var(--field-bg); color: var(--text-color); font-weight: bold; }
+
+/* --- 優化數據面板 (標籤化) --- */
+.totals { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 12px; font-size: 13px; font-weight: bold; margin-bottom: 15px; color: var(--text-muted);}
+.total-tag { display: flex; align-items: center; background: var(--field-bg); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--field-border); }
+.totals span { font-weight: 900; color: var(--success-color); font-size: 15px; margin-left: 6px; }
+
+/* 進度條 */
+.progress-container { width: 100%; height: 10px; background: var(--track); border-radius: 5px; overflow: hidden; margin: 15px 0; }
+.progress-bar { height: 100%; background: var(--success-color); width: 0%; transition: width 0.5s ease; }
+
+.global-controls { display: flex; justify-content: center; gap: 10px; align-items: center; flex-wrap: wrap; padding-top: 10px; border-top: 1px dashed var(--divider); }
+.global-controls select { padding: 8px; border-radius: 8px; border: 1px solid var(--field-border); font-size: 14px; outline: none; background: var(--field-bg); color: var(--text-color); font-weight: bold; }
+
+/* ═══ 按鈕與表單控制項 ═══ */
+button, .btn-secondary { background-color: var(--primary-color); color: white; border: none; border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; transition: 0.2s; font-weight: bold; text-decoration: none; }
+button:hover, .btn-secondary:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+button:active, .btn-secondary:active { transform: translateY(0); }
+.btn-secondary { background-color: #888; }
+.btn-reset { background-color: var(--danger-color); }
+.pass-note { font-size: 11px; color: var(--danger-color); font-weight: bold; text-align: center; width: 100%; margin-top: 6px; line-height: 1.4; }
+.pass-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: bold; color: var(--text-color); }
+.pass-toggle input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+.num-field { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: bold; color: var(--text-color); }
+.num-field input { width: 62px; padding: 7px; border-radius: 8px; border: 1px solid var(--field-border); background: var(--field-bg); color: var(--text-color); text-align: center; font-weight: bold; }
+
+/* ═══ 先祖卡片：容器、卡片、頭像、控制列、footer ═══ */
+/* --- 先祖卡片區塊 --- */
+/* align-items:flex-start -> flex 不管高度，改由 alignCardSections() 分群指定：
+   先祖樹一群、嚮導一群，各自齊平。不能用 stretch，因為 flex 行高取決於
+   「該行最高的那一張」，嚮導（questap29 有 12 個任務）在場時所有卡都會被拉到它那麼高。 */
+/* 卡片排成一條水平帶、左右捲動。原本是 flex-wrap:wrap，手機一列只塞得下一張，
+   一季五隻就要往下捲八個螢幕。改成不換行之後，頁高＝最高的那張卡。
+   不吸附：使用者要能停在兩張卡之間，所以沒有 scroll-snap-type / scroll-snap-align。
+   （scroll-padding-left 也一併拿掉，它只對吸附與 scrollIntoView 有意義。）
+   overscroll-behavior-x: contain 留著 —— 它擋的是瀏覽器的左滑返回手勢，跟吸附無關。
+   justify-content 的 safe：卡片塞得下時置中，塞不下時自動退回 flex-start。
+   不能只寫 center —— 溢出時 center 會把第一張切掉一半，而且捲不回去
+   （捲動區取不到負的溢出區）。不支援 safe 的舊瀏覽器會整條宣告丟掉，
+   退回預設的 flex-start，也就是靠左，不會壞掉。 */
+#spiritsContainer { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 20px; padding: 15px; margin: 0 auto; max-width: 1800px;
+  justify-content: safe center;
+  overflow-x: auto; overscroll-behavior-x: contain; }
+#spiritsContainer::-webkit-scrollbar { height: 10px; }
+#spiritsContainer::-webkit-scrollbar-thumb { background: var(--track); border-radius: 5px; }
+.spirit { display: flex; flex-direction: column; align-items: center; border: 1px solid var(--outline); border-radius: 16px; padding: 12px; width: 292px; flex: 0 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,0.05); background-color: var(--card-bg);
+  /* 不要寫成 transition: 0.3s（= all）：卡片高度由 JS 量完寫回，
+     高度一旦有過渡動畫，下一次量到的就是動畫中途的值（實測會差 16px）。 */
+  transition: box-shadow 0.3s, border-color 0.3s, transform 0.3s, background-color 0.3s; }
+.spirit:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: var(--primary-color); }
+.spirit-image { width: 85px; height: 85px; border-radius: 50%; margin-bottom: 10px; border: 3px solid var(--outline); object-fit: cover; background: rgba(0,0,0,0.05); }
+.spirit-header { font-size: 16px; font-weight: bold; margin-bottom: 8px; color: var(--text-color); text-align: center; } 
+.spirit-footer { font-size: 12px; color: var(--footer-text); text-align: center; line-height: 1.6; background: var(--footer-bg); padding: 8px; border-radius: 8px; width: 100%; }
+/* auto 吃掉卡片剩下的垂直空間 -> footer 貼在最下緣。
+   卡片被 stretch 拉到同高後，矮卡多出來的空間就落在這裡。 */
+.spirit > .spirit-footer { margin-top: auto; }
+
+.spirit-controls { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; border-top: 1px dashed var(--divider); width: 100%; font-size: 13px; }
+.input-group { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%;}
+.spirit-controls input[type="number"] { width: 45px; padding: 4px; font-size: 13px; border: 1px solid var(--field-border); border-radius: 6px; background: var(--field-bg); color: var(--text-color); text-align: center; }
+
+/* 每個 Lv 區塊 = 左邊一小段好感度進度條 + 右邊原本的那堆列。
+   進度條刻意切成一段一段掛在各區塊上，高度由 flex 自動等於該區塊，
+   所以不用量 getBoundingClientRect、不用 ResizeObserver，
+   換語言／切緊湊模式／字型載入造成的高度變化都會自動跟上。 */
+/* ═══ 兌換樹：Lv 區塊、進度條、標籤、格子 ═══ */
+.level-block { display: flex; align-items: stretch; gap: 8px; width: 100%; margin-bottom: 6px; border-top: 1px solid var(--divider); }
+.level-row { display: flex; flex-direction: column-reverse; align-items: center; padding-top: 8px; flex: 1 1 auto; min-width: 0; }
+.lv-seg { position: relative; width: 10px; flex: 0 0 auto; margin-top: 8px; border-radius: 5px; background: var(--track); opacity: 0.45; }
+/* 填充由下往上，對應「好感度從這層的門檻往下一層累積」 */
+.lv-seg > i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 5px; display: block; }
+.lv-seg > i.done { background: var(--success-color); }
+.lv-seg > i.now  { background: var(--primary-color); }
+/* 行高寫死：標籤有沒有掛「需 N」那個 span 會讓行框差 2px（bold 與 500 的字體度量不同），
+   最高層沒有門檻的先祖（例如只有兩層的長老）就會整張卡往上位移 2px。 */
+.level-label { font-weight: bold; font-size: 12px; line-height: 16px; margin-top: 4px; color: var(--text-muted); }
+.lv-need { font-weight: 500; line-height: inherit; opacity: 0.85; }
+.lv-need.met { color: var(--success-color); opacity: 1; }
+
+.items-row { 
+    display: flex; 
+    justify-content: flex-start; 
+    gap: 6px; 
+    margin-bottom: 4px; 
+    width: 246px; /* 固定寬度：3個圖示(78*3) + 2個間距(6*2) */
+    margin-left: auto;
+    margin-right: auto;
+}
+.item { width: 78px; text-align: center; cursor: pointer; border: 1px solid var(--item-border); border-radius: 10px; padding: 4px;
+  position: relative; box-shadow: var(--item-shadow);
+  transition: border-color 0.2s, background-color 0.2s, transform 0.2s, opacity 0.2s, box-shadow 0.2s; background-color: var(--item-bg); flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; user-select: none; }
+/* hover 只給真的有滑鼠的裝置。觸控螢幕上 :hover 會在點完之後「黏住」——
+   手指早就移開，那一格還維持浮起，直到點別的地方。
+   浮起用 transform + box-shadow，兩者都不參與版面計算，不會推開鄰居；
+   原本的 scale(1.05) 會讓格子長大壓到旁邊那格。 */
+@media (hover: hover) {
+    /* 框「變粗」是用 0 0 0 1px 的 ring 疊在 1px 邊框外面，不是改 border-width。
+       box-sizing 是 border-box，加粗邊框會把內容區擠小 2px，格子高度由內容撐，
+       於是整列會上下跳。ring 是 box-shadow，完全不參與版面計算。 */
+    .item:hover { border-color: var(--primary-color); transform: translateY(-3px);
+                  box-shadow: 0 0 0 1px var(--primary-color), var(--item-shadow-hover);
+                  z-index: 1; }
+    .item.locked:hover { border-color: var(--item-border); transform: none;
+                         box-shadow: var(--item-shadow); }
+}
+/* 按下去的回饋，觸控也吃得到 */
+.item:active { transform: translateY(-1px); box-shadow: var(--item-shadow); }
+.item.unlocked { border-color: var(--success-color); background-color: var(--success-bg); }
+.item.season { border-color: var(--season-color); background-color: var(--season-bg); }
+.item.unlocked.season { border-color: var(--success-color); background-color: var(--success-bg); }
+.item.locked { opacity: 0.35; filter: grayscale(1); cursor: not-allowed; }
+.item img { width: 50px; height: 50px; margin: 0 auto; border-radius: 6px; object-fit: contain; }
+/* 每一格的高度必須固定，否則同一列在不同卡片上高度不同，Lv 區塊就對不齊。
+   做法：圖固定 50px、三行字各鎖一行不換行。格寬加大到 76px 是為了讓
+   最長的幣別標籤（「季節之心: 1」/「Ascended: 250」）排得下，不必截字。 */
+.item div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item div { font-size: 10px; margin-top: 3px; line-height: 1.2; word-break: normal; font-weight: 500;}
+/* 數字那兩行縮一級：英文的「Ascended: 250」在 10px 會被截掉，數字被截比名稱被截嚴重 */
+.item div:not(.nm) { font-size: 9px; }
+
+/* ═══ 緊湊模式：只改尺寸，版面邏輯不動 ═══ */
+/* --- 緊湊模式 --- */
+/* 只改尺寸，不動版面邏輯：row/col 都是 Python 算好的，這裡不碰。
+   高度的大頭是名稱那行會 break-all 折成兩行，所以緊湊模式把它壓成一行加省略號
+   （全名進 title，滑過去看），圖示 50 -> 32px。
+   單格 107 -> 74px，最長的嚮導卡（questap31）約少掉四分之一。 */
+body.compact .items-row { width: 146px; gap: 4px; }
+body.compact .item { width: 46px; padding: 3px; border-radius: 7px; }
+@media (hover: hover) { body.compact .item:hover { transform: translateY(-2px); } }
+body.compact .item div { font-size: 9px; margin-top: 1px; line-height: 1.15; }
+/* 圖示不跟著格寬縮：格子要夠寬才塞得下「季蠟: 12」一行，但高度要靠小圖省，
+   所以這裡把圖固定 30px，不用 width:100%（一縮就是正方形，寬高一起掉）。 */
+body.compact .item img { width: 30px; height: 30px; margin: 0 auto; border-radius: 4px; }
+.item .short { display: none; }
+body.compact .item .full { display: none; }
+body.compact .item .short { display: inline; }
+body.compact .level-row { padding-top: 5px; }
+body.compact .level-block { gap: 5px; margin-bottom: 4px; }
+body.compact .lv-seg { width: 7px; margin-top: 5px; border-radius: 4px; }
+body.compact .level-label { font-size: 11px; line-height: 15px; margin-top: 2px; }
+body.compact .spirit { width: 188px; padding: 10px; }
+body.compact .spirit-image { width: 64px; height: 64px; margin-bottom: 8px; }
+body.compact .spirit-header { font-size: 14px; }
+
+/* Toast 提示條 */
+#toastContainer { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1001; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.toast { background: rgba(50, 50, 50, 0.95); color: #fff; padding: 12px 24px; border-radius: 30px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: toastFadeIn 0.3s, toastFadeOut 0.3s 2.7s forwards; }
+@keyframes toastFadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toastFadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+@media (max-width: 480px) {
+    .header-title { order: -1; min-width: 100%; margin-bottom: 10px; }
+    #spiritsContainer { gap: 15px; padding: 10px; }
+    .lang-label { display: none; }
+}
+.collapse-arrow { font-size: 14px; transition: transform 0.25s ease; color: var(--text-muted); }
+.collapsible-header.collapsed .collapse-arrow { transform: rotate(-90deg); }
+.collapsible-body { overflow: hidden; max-height: 2000px; transition: max-height 0.3s ease, opacity 0.25s ease, margin-top 0.25s ease; opacity: 1; margin-top: 8px; }
+.collapsible-body.collapsed { max-height: 0; opacity: 0; margin-top: 0; }
+.version-item { border-left: 3px solid var(--danger-color); padding: 4px 0 4px 12px; margin-bottom: 10px; }
+.version-header { display: flex; gap: 10px; align-items: baseline; }
+.version-tag { font-weight: bold; font-size: 13px; }
+.version-date { font-size: 11px; color: var(--text-muted); }
+.version-content { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--text-muted); }
+
+</style>
+</head>
+<body>
+
+<header>
+    <div class="top-left-controls">
+        <span id="ui-lang-label">語言</span>
+        <select id="langSelect" class="top-select" onchange="changeLang()">
+            <option value="zh-hant">繁體中文</option>
+            <option value="zh">简体中文</option>
+            <option value="en">English</option>
+        </select>
+    </div>
+    <div class="header-title" id="ui-title">季節先祖解鎖計算器</div>
+    <div class="top-controls">
+        <button class="top-btn" onclick="toggleTheme()">🌓 Theme</button>
+        <a href="index.html" class="top-btn">🏠 Home</a>
+    </div>
+    
+</header>
+
+<div class="dashboard">
+    <div class="profile-section">
+        <select id="profileSelect" onchange="switchProfile()"></select>
+        <button onclick="addProfile()" id="ui-add-profile">➕ 新增方案</button>
+        <button class="btn-reset" onclick="deleteProfile()" id="ui-del-profile">刪除</button>
+    </div>
+
+    <!-- 數據標籤化，避免手機版斷行混亂；幣別標籤由 JS 動態產生 -->
+    <div class="totals" id="totalsRow"></div>
+
+    <div class="progress-container">
+        <div class="progress-bar" id="seasonProgressBar"></div>
+    </div>
+
+    <div class="global-controls">
+        <label class="pass-toggle">
+            <input type="checkbox" id="passToggle" onchange="togglePass()">
+            <span id="ui-pass">擁有季卡且季節進行中</span>
+        </label>
+        <label class="pass-toggle" id="hideRewardWrap" style="display:none">
+            <input type="checkbox" id="hideRewardToggle" onchange="toggleHideReward()">
+            <span id="ui-hidereward">隱藏畢業禮與季節項鍊</span>
+        </label>
+        <label class="pass-toggle">
+            <input type="checkbox" id="compactToggle" onchange="toggleCompact()">
+            <span id="ui-compact">緊湊模式</span>
+        </label>
+        <div class="num-field">
+            <span id="ui-daily">每日季蠟</span>
+            <input type="number" id="dailyGain" min="0" step="1" onchange="updateEconomy()">
+        </div>
+        <div class="num-field">
+            <span id="ui-initial">起始季蠟</span>
+            <input type="number" id="initialCandle" min="0" step="1" onchange="updateEconomy()">
+        </div>
+        <select id="seasonSelect" onchange="switchSeason()"></select>
+        <button class="btn-reset" onclick="resetSeason()" id="ui-reset-season">重置當前季節</button>
+        <button class="btn-secondary" onclick="exportData()" id="ui-export">📥 匯出</button>
+        <button class="btn-secondary" onclick="document.getElementById('importFile').click()" id="ui-import">📤 匯入</button>
+        <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importData(event)">
+
+        <div class="collapsible-header" id="changelog-header" onclick="toggleChangelog()" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+        <span>📝 更新紀錄</span>
+        <span class="collapse-arrow">▼</span>
+        </div>
+
+        <div class="collapsible-body" id="changelog-body">
+            <div id="changelog-list"></div>
+        </div>
+    </div>
+</div>
+
+<div id="spiritsContainer"></div>
+<div id="toastContainer"></div>
+
+<script>
+const uiDict = {
+    'zh-hant': { langLabel: '語言', title: '先靈解鎖計算器', home: '🏠 首頁', addProf: '➕ 新增方案', delProf: '刪除', t1: '總需求', t2: '總好感度:', t3: '已花', t4: '還需天數:', resetSeason: '重置當前季節', compExp: '陪伴好感度', resetSpirit: '重置進度', cst: '季蠟', exp: '好感', profPrompt: '請輸入自定義解鎖方案名稱：', errReq: '你還不能解鎖', errReq2: '需要總好感度達到', export: '📥 匯出', import: '📤 匯入', addExp: '增加', day: '天', guide: '(嚮導)', tierLbl: '可達等級', partialNote: '本季另有 {n} 隻舊版格式先祖尚未收錄',
+        pass: '擁有季卡且季節進行中', hideReward: '隱藏畢業禮與季節項鍊', compact: '緊湊模式', needExp: '需', daily: '每日季蠟', initial: '起始季蠟', noPassNote: '無季卡：季卡限定項目（含季心）無法取得', importBad: '⚠️ 匯入檔含不合法欄位，已略過' },
+    'zh': { langLabel: '语言', title: '先祖解锁计算器', home: '🏠 首页', addProf: '➕ 新增方案', delProf: '删除', t1: '总需求', t2: '总好感度:', t3: '已花', t4: '还需天数:', resetSeason: '重置当前季节', compExp: '陪伴好感度', resetSpirit: '重置进度', cst: '季蜡', exp: '好感', profPrompt: '请输入自定义解锁方案名称：', errReq: '你还不能解锁', errReq2: '需要总好感度达到', export: '📥 导出', import: '📤 导入', addExp: '增加', day: '天', guide: '(向导)', tierLbl: '可达等级', partialNote: '本季另有 {n} 只旧版格式先祖尚未收录',
+        pass: '拥有季卡且季节进行中', hideReward: '隐藏毕业礼与季节项链', compact: '紧凑模式', needExp: '需', daily: '每日季蜡', initial: '起始季蜡', noPassNote: '无季卡：季卡限定项目（含季心）无法取得', importBad: '⚠️ 导入档含不合法栏位，已略过' },
+    'en': { langLabel: 'Lang', title: 'Spirit Calculator', home: '🏠 Home', addProf: '➕ Add Profile', delProf: 'Delete', t1: 'Required', t2: 'Total Affection:', t3: 'Spent', t4: 'Days Left:', resetSeason: 'Reset Season', compExp: 'Companion Aff.', resetSpirit: 'Reset Progress', cst: 'Cost', exp: 'Aff.', profPrompt: 'Enter profile name:', errReq: 'Cannot unlock', errReq2: 'Requires total affection:', export: '📥 Export', import: '📤 Import', addExp: 'Add', day: 'd', guide: '(Guide)', tierLbl: 'Max tier', partialNote: '{n} more legacy-format spirits in this season are not yet included',
+        pass: 'Have Season Pass and Season In Progress', hideReward: 'Hide Season Heart items', compact: 'Compact', needExp: 'need', daily: 'Candles/day', initial: 'Starting', noPassNote: 'No pass: pass-exclusive items (incl. Season Heart) are unobtainable', importBad: '⚠️ Import contained invalid keys; they were skipped' }
+};
+
+
+/* --- 幣別定義：成本向量化的單一事實來源 --- */
+const CURRENCIES = {
+    season_candle: { 'zh-hant': '季蠟',   'zh': '季蜡',   'en': 'S.Candle', icon: '🕯️', primary: true },
+    candles:       { 'zh-hant': '蠟燭',   'zh': '蜡烛',   'en': 'Candle',   icon: '🕯' },
+    heart:         { 'zh-hant': '愛心',   'zh': '爱心',   'en': 'Heart',    icon: '💛' },
+    season_heart:  { 'zh-hant': '季節之心','zh': '季节之心','en': 'S.Heart',  icon: '💙' },
+    prestige:      { 'zh-hant': '升華蠟燭','zh': '升华蜡烛','en': 'Ascended', icon: '✨' }
+};
+const PRIMARY_CURRENCY = 'season_candle';
+function curLabel(code) {
+    const c = CURRENCIES[code];
+    return c ? (c[currentLang] || c['en']) : code;
+}
+/* 季卡經濟參數：日產與起始量 */
+const PASS_ECONOMY = { withPass: { daily: 6 }, noPass: { daily: 5 } };
+
+const versionData = [
+    { ver: 'v1.0.0', date: '2026-07-04',
+        changes: {
+            'zh-hant': [
+                '首次發布：季節先祖解鎖計算器',
+                '支援先祖解鎖進度追蹤，點擊項目即可標記解鎖',
+                '自動計算總需求季蠟、已花費季蠟與總好感度',
+                '新增陪伴好感度累加功能，可手動輸入好感度數值',
+                '新增「還需天數」估算（依每日蠟燭獲取量與初始蠟燭計算）',
+                '新增進度條顯示當季蠟燭花費比例',
+                '支援多方案切換，可為不同玩家建立獨立進度紀錄',
+                '新增資料匯出/匯入功能，方便備份與跨裝置轉移',
+                '新增單一先祖重置與整季重置功能'
+            ],
+            'zh': [
+                '首次发布：季节先祖解锁计算器',
+                '支持先祖解锁进度追踪，点击项目即可标记解锁',
+                '自动计算总需求季蜡、已花费季蜡与总好感度',
+                '新增陪伴好感度累加功能，可手动输入好感度数值',
+                '新增"还需天数"估算（依每日蜡烛获取量与初始蜡烛计算）',
+                '新增进度条显示当季蜡烛花费比例',
+                '支持多方案切换，可为不同玩家建立独立进度记录',
+                '新增数据导出/导入功能，方便备份与跨设备转移',
+                '新增单一先祖重置与整季重置功能'
+            ],
+            'en': [
+                'Initial release: Season Spirit Calculator',
+                'Track spirit item unlock progress with a single click',
+                'Auto-calculate total required candles, candles spent, and total affection',
+                'Added companion affection tracker with manual input',
+                'Added estimated "days remaining" based on daily candle income and starting candles',
+                'Added progress bar showing candle spending ratio for the season',
+                'Support multiple profiles for tracking different players independently',
+                'Added export/import for backup and cross-device transfer',
+                'Added per-spirit reset and full-season reset',
+            ]
+        }
+    }
+];
+
+let currentLang = localStorage.getItem('sky_tool_lang') || 'zh-hant';
+let spiritData = {};             // spirits.data.json（無語言，機器產）
+let i18nData = {};               // spirits.i18n.json（人工養）
+let imageData = {};              // spirits.images.json（人工養）
+
+/* 圖片查表。項目用遊戲原始節點名當鍵（heart_point），先祖頭像用 spirit.<代碼>。
+   鍵不放在 data.json 裡是因為那支檔每次 build 都整個覆蓋，填的圖會被洗掉。 */
+function imageOf(key, kind) {
+    // 先查節點專屬圖，沒有才退到類別共用圖（item.lootbox 之類）
+    // 值可能是字串，也可能是陣列（動作的 gif 影格），原樣回傳由呼叫端處理
+    if (key && imageData[key]) return imageData[key];
+    if (kind && imageData['item.' + kind]) return imageData['item.' + kind];
+    return '';
+}
+const firstFrame = v => Array.isArray(v) ? (v[0] || '') : (v || '');
+
+/* 動作的 gif：影格存成網址陣列。用一支共用計時器推進全部動畫圖，
+   不要每張圖各開一個 setInterval —— 一頁可能有上百張。
+   每次重繪會清空登記表，避免累積已移除的節點。 */
+const animated = [];
+let animTick = 0, animTimer = null;
+const ANIM_MS = 400;
+function resetAnimations() { animated.length = 0; }
+function registerAnimation(img, frames) {
+    frames.forEach(u => { const p = new Image(); p.src = u; });   // 預載，換圖才不閃
+    animated.push({ img, frames });
+    if (!animTimer) {
+        animTimer = setInterval(() => {
+            animTick++;
+            for (const a of animated) {
+                if (!a.img.isConnected) continue;
+                a.img.src = a.frames[animTick % a.frames.length];
+            }
+        }, ANIM_MS);
+    }
+}
+let currentSeason = "";          // 分組代碼，例如 season_28 / regular
+let items = [];
+
+/* --- i18n 查表：缺字串時退到繁中，再退到 key 本身 --- */
+function t18(key) {
+    const tryLangs = [currentLang, 'zh-hant'];
+    for (const l of tryLangs) {
+        const v = i18nData[l] && i18nData[l][key];
+        if (v) return v;
+    }
+    return key.split('.').slice(1).join('.') || key;
+}
+const groupName  = g  => t18(`group.${g}`);
+const spiritName = sp => t18(`spirit.${sp}`);
+const itemName   = k  => t18(`item.${k}`);
+let spiritExpMap = {};
+const EXP_PER_ITEM = 100;        // 陪伴一天 = 100 好感（exp 欄位改用 ta 原始 XP 後的刻度）
+let totalRequired = {};          // 幣別 -> 需求量（向量化後取代 totalRequiredCandle）
+let hasPass = true;              // 是否擁有季卡
+let dailyGain = PASS_ECONOMY.withPass.daily;
+let initialCandle = 30;
+
+/* 季卡／經濟參數以 profile 為單位儲存 */
+function econKey() { return `${currentProfileId}_economy`; }
+
+// 「隱藏畢業禮與季節項鍊」= 用季節之心計價的全部項目（含成本 0 的項鍊）。
+// 一個季節一個開關，狀態跟經濟設定放在一起（每個分組各自記住）。
+let hideReward = false;
+function isHidden(item) { return hideReward && !!item.rw; }   // rw 由 Python 標記
+function toggleHideReward() {
+    hideReward = document.getElementById('hideRewardToggle').checked;
+    const e = readEconomy();
+    e.hideReward = e.hideReward || {};
+    e.hideReward[currentSeason] = hideReward;
+    localStorage.setItem(econKey(), JSON.stringify(e));
+    loadSeasonData();      // 隱藏會改變嚮導版面與統計，整組重算
+    updateUI();
+}
+function readEconomy() {
+    try {
+        const e = JSON.parse(localStorage.getItem(econKey()) || '{}');
+        return (e && typeof e === 'object') ? e : {};
+    } catch (_) { return {}; }
+}
+function loadEconomy() {
+    const e = readEconomy();
+    hasPass = e.hasPass !== false;
+    dailyGain = Number.isFinite(e.dailyGain) ? e.dailyGain
+              : (hasPass ? PASS_ECONOMY.withPass.daily : PASS_ECONOMY.noPass.daily);
+    initialCandle = Number.isFinite(e.initialCandle) ? e.initialCandle : 30;
+    hideReward = !!(e.hideReward && e.hideReward[currentSeason]);
+    syncEconomyInputs();
+}
+function saveEconomy() {
+    // 合併寫回，不要把 hideReward（每季各自的設定）洗掉
+    const e = readEconomy();
+    localStorage.setItem(econKey(),
+        JSON.stringify({ ...e, hasPass, dailyGain, initialCandle }));
+}
+function syncEconomyInputs() {
+    const p = document.getElementById('passToggle');
+    const d = document.getElementById('dailyGain');
+    const i = document.getElementById('initialCandle');
+    const h = document.getElementById('hideRewardToggle');
+    if (p) p.checked = hasPass;
+    if (d) d.value = dailyGain;
+    if (i) i.value = initialCandle;
+    if (h) h.checked = hideReward;
+}
+function togglePass() {
+    hasPass = document.getElementById('passToggle').checked;
+    // 切換季卡時，日產跟著回到該狀態的預設值
+    dailyGain = hasPass ? PASS_ECONOMY.withPass.daily : PASS_ECONOMY.noPass.daily;
+    if (!hasPass) {
+        // 無季卡時，已勾選的季卡限定項目一律取消，避免算進不可能拿到的成本
+        items.filter(i => i.season).forEach(i => i.unlocked = false);
+        saveState();
+    }
+    saveEconomy();
+    syncEconomyInputs();
+    updateUI();
+}
+function updateEconomy() {
+    const d = parseInt(document.getElementById('dailyGain').value, 10);
+    const i = parseInt(document.getElementById('initialCandle').value, 10);
+    dailyGain = Number.isFinite(d) && d >= 0 ? d : dailyGain;
+    initialCandle = Number.isFinite(i) && i >= 0 ? i : initialCandle;
+    saveEconomy();
+    syncEconomyInputs();
+    updateUI();
+}
+/* 該項目在目前季卡狀態下是否可取得 */
+function isObtainable(item) { return hasPass || !item.season; }
+
+let spiritProfiles;
+try {
+    const raw = JSON.parse(localStorage.getItem('spiritProfiles'));
+    spiritProfiles = Array.isArray(raw) && raw.length ? raw : null;
+} catch (_) { spiritProfiles = null; }
+if (!spiritProfiles) spiritProfiles = [{ id: 'spirit_default', name: '預設方案 / Default' }];
+let currentProfileId = localStorage.getItem('currentSpiritProfileId') || spiritProfiles[0].id;
+
+function initApp() {
+    const theme = localStorage.getItem('sky_tool_theme') || 'light';
+    if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    document.getElementById('langSelect').value = currentLang;
+    // 沒存過就看螢幕寬度決定預設：手機預設開，桌機預設關。存過就照存的。
+    const cp = localStorage.getItem('sky_tool_compact');
+    const compactOn = cp === null ? window.innerWidth < 700 : cp === '1';
+    document.body.classList.toggle('compact', compactOn);
+    document.getElementById('compactToggle').checked = compactOn;
+    
+    // data 與 i18n 分家：data 機器產（可隨時覆蓋），i18n 人工養（只累加）
+    // 三份檔案：data 機器產（可覆蓋），i18n 與 images 人工養（只累加）
+    Promise.all([
+        fetch('data/spirits.data.json').then(r => r.json()),
+        fetch('data/spirits.i18n.json').then(r => r.json()),
+        fetch('data/spirits.images.json').then(r => r.json()).catch(() => ({}))
+    ]).then(([data, i18n, imgs]) => {
+        spiritData = data;
+        i18nData = i18n;
+        imageData = imgs || {};
+        updateUIText();
+        updateProfileDropdown();
+        loadLangData();
+    }).catch(err => {
+        document.getElementById('spiritsContainer').textContent =
+            '無法載入資料 (Failed to load data).';
+        document.getElementById('spiritsContainer').style.cssText =
+            'color:red;text-align:center;';
+    });
+    renderChangelog();
+    if (localStorage.getItem('sky_tool_changelog_collapsed') !== '0') {
+        document.getElementById('changelog-body').classList.add('collapsed');
+        document.getElementById('changelog-header').classList.add('collapsed');
+    }
+}
+
+function showToast(msg) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+
+}
+function renderChangelog() {
+        const listContainer = document.getElementById('changelog-list');
+        if (!listContainer || typeof versionData === 'undefined') return;
+    
+        listContainer.innerHTML = versionData.map(item => {
+            const contentList = item.changes[currentLang] || item.changes['en'];
+            const listHtml = contentList.map(text => `<li>${text}</li>`).join('');
+    
+            return `
+                <div class="version-item">
+                    <div class="version-header">
+                        <span class="version-tag">${item.ver}</span>
+                        <span class="version-date">${item.date}</span>
+                    </div>
+                    <ul class="version-content">
+                        ${listHtml}
+                    </ul>
+                </div>
+            `;
+        }).join('');
+    }
+    
+
+// --- 切換邏輯 ---
+function toggleChangelog() {
+        const header = document.getElementById('changelog-header');
+        const body = document.getElementById('changelog-body');
+        const collapsed = body.classList.toggle('collapsed');
+        header.classList.toggle('collapsed', collapsed);
+        localStorage.setItem('sky_tool_changelog_collapsed', collapsed ? '1' : '0');
+    }
+
+/* 緊湊模式是純顯示設定，跟方案、季節都無關，所以單獨一個全域 key，
+   不塞進 economy（那是每季各自記的）。切換只加減 class，不重繪，不碰進度。 */
+function toggleCompact() {
+    const on = document.getElementById('compactToggle').checked;
+    document.body.classList.toggle('compact', on);
+    localStorage.setItem('sky_tool_compact', on ? '1' : '0');
+    alignCardSections(document.getElementById('spiritsContainer'));  // 字級變了要重量
+}
+
+function toggleTheme() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    localStorage.setItem('sky_tool_theme', isDark ? 'light' : 'dark');
+}
+
+function changeLang() {
+    currentLang = document.getElementById('langSelect').value;
+    localStorage.setItem('sky_tool_lang', currentLang);
+    updateUIText();
+    loadLangData(); 
+}
+
+function updateUIText() {
+    const t = uiDict[currentLang];
+    document.getElementById('ui-lang-label').textContent = t.langLabel;
+    document.getElementById('ui-title').textContent = t.title;
+    //document.getElementById('ui-home').textContent = t.home;
+    document.getElementById('ui-add-profile').textContent = t.addProf;
+    document.getElementById('ui-del-profile').textContent = t.delProf;
+    document.getElementById('ui-pass').textContent = t.pass;
+    document.getElementById('ui-hidereward').textContent = t.hideReward;
+    document.getElementById('ui-compact').textContent = t.compact;
+    document.getElementById('ui-daily').textContent = t.daily;
+    document.getElementById('ui-initial').textContent = t.initial;
+    document.getElementById('ui-reset-season').textContent = t.resetSeason;
+    document.getElementById('ui-export').textContent = t.export;
+    document.getElementById('ui-import').textContent = t.import;
+}
+
+function loadLangData() {
+    const sel = document.getElementById('seasonSelect');
+    sel.textContent = '';
+    // 分組 key 是代碼（season_28 / regular），顯示名查 i18n；季號大的排前面，regular 最後
+    const groups = Object.keys(spiritData).sort((a, b) => {
+        const na = /^season_(\d+)$/.exec(a), nb = /^season_(\d+)$/.exec(b);
+        if (na && nb) return +nb[1] - +na[1];
+        return na ? -1 : nb ? 1 : a.localeCompare(b);
+    });
+    if (!groups.length) return;
+    groups.forEach(g => {
+        const o = document.createElement('option');
+        o.value = g;
+        o.textContent = groupName(g);
+        sel.appendChild(o);
+    });
+    if (!groups.includes(currentSeason)) currentSeason = groups[0];
+    sel.value = currentSeason;
+    loadSeasonData();
+}
+
+function updateProfileDropdown() {
+    const select = document.getElementById('profileSelect');
+    select.innerHTML = '';
+    spiritProfiles.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = p.name;
+        if (p.id === currentProfileId) option.selected = true;
+        select.appendChild(option);
+    });
+}
+
+function switchProfile() {
+    currentProfileId = document.getElementById('profileSelect').value;
+    localStorage.setItem('currentSpiritProfileId', currentProfileId);
+    loadSeasonData();
+}
+
+function addProfile() {
+    const name = prompt(uiDict[currentLang].profPrompt);
+    if (name && name.trim() !== '') {
+        const newId = 'spirit_profile_' + Date.now();
+        spiritProfiles.push({ id: newId, name: name.trim() });
+        localStorage.setItem('spiritProfiles', JSON.stringify(spiritProfiles));
+        currentProfileId = newId;
+        localStorage.setItem('currentSpiritProfileId', currentProfileId);
+        updateProfileDropdown();
+        loadSeasonData();
+        showToast('✅ 新增方案成功');
+    }
+}
+
+function deleteProfile() {
+    if (spiritProfiles.length <= 1) {
+        showToast('❌ 無法刪除最後一個方案');
+        return;
+    }
+    if (confirm(`確定要刪除當前方案嗎？`)) {
+        // 掃全部 key，不只當前季節（原本只刪 items 內的，其他季節會殘留）
+        const doomed = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith(currentProfileId + '_')) doomed.push(k);
+        }
+        doomed.forEach(k => localStorage.removeItem(k));
+        spiritProfiles = spiritProfiles.filter(p => p.id !== currentProfileId);
+        currentProfileId = spiritProfiles[0].id;
+        localStorage.setItem('spiritProfiles', JSON.stringify(spiritProfiles));
+        localStorage.setItem('currentSpiritProfileId', currentProfileId);
+        updateProfileDropdown();
+        loadSeasonData();
+        showToast('🗑️ 方案已刪除');
+    }
+}
+
+function switchSeason() {
+    currentSeason = document.getElementById('seasonSelect').value;
+    loadSeasonData();
+}
+
+function loadSeasonData() {
+    items = [];
+    try { spiritExpMap = JSON.parse(localStorage.getItem(`${currentProfileId}_spiritExpMap`) || '{}'); }
+    catch (_) { spiritExpMap = {}; }
+    if (spiritExpMap === null || typeof spiritExpMap !== 'object') spiritExpMap = {};
+    loadEconomy();
+    totalRequired = {};
+    const group = spiritData[currentSeason];
+    if (!group) return;
+
+    // 儲存鍵改用先祖代碼（全域唯一）。舊版用 season_data_s0 這種位置索引，
+    // 不含季節，所以不同季的 spirit1 會共用同一筆進度 —— 那是既有 bug。
+    Object.keys(group.spirits).forEach(code => {
+        const spirit = group.spirits[code];
+        const sk = `season_data_${code}`;
+        if (spiritExpMap[sk] === undefined) spiritExpMap[sk] = 0;
+
+        spirit.items.forEach((item, idx) => {
+            item.spiritKey = sk;
+            item.spiritCode = code;
+            item.spiritKind = spirit.kind;          // tree | guide
+            item.spiritName = spiritName(code);
+            item.spiritImage = firstFrame(imageOf(`spirit.${code}`));
+            item.nm = itemName(item.k);             // 顯示名查 i18n
+            item.season = !!item.pass;              // 季卡限定（沿用既有欄位名）
+            item.image = imageOf(item.src, item.k); // 節點專屬圖，退到類別共用圖
+            // 鍵用整個 items 陣列的位置，而且是在過濾之前算 ——
+            // 先過濾再編號的話，開關一切索引就位移，存好的進度會對到別的節點。
+            item.key = `${sk}_lv${item.level}_i${idx}`;
+            if (isHidden(item)) { item.unlocked = false; return; }
+            items.push(item);
+            addCost(totalRequired, currencyOf(item), parseFloat(item.cst) || 0);
+        });
+    });
+    // 這一組有沒有可隱藏的項目（只有嚮導有），沒有就不顯示開關
+    const wrap = document.getElementById('hideRewardWrap');
+    if (wrap) {
+        const has = Object.values(group.spirits)
+            .some(s => s.items.some(i => i.rw));
+        wrap.style.display = has ? '' : 'none';
+    }
+
+    items.forEach(i => {
+        try { i.unlocked = JSON.parse(localStorage.getItem(`${currentProfileId}_${i.key}`) || 'false'); }
+        catch (_) { i.unlocked = false; }
+    });
+    updateUI();
+}
+
+/* 常駐分組（長老、六張地圖）沒有季節截止日 -> 不顯示天數、不受季卡影響 */
+function isTimeless() {
+    return currentSeason === 'elders' || currentSeason.startsWith('realm_');
+}
+
+function saveState(){
+    items.forEach(i=>localStorage.setItem(`${currentProfileId}_${i.key}`, i.unlocked));
+    localStorage.setItem(`${currentProfileId}_spiritExpMap`, JSON.stringify(spiritExpMap)); 
+}
+
+/* --- 匯入驗證：只接受本工具自己的 key，其餘一律丟棄 --- */
+const PROFILE_ID_RE = /^spirit_(default|profile_\d{1,20})$/;
+const DATA_KEY_RE   = /^spirit_(?:default|profile_\d{1,20})_(?:spiritExpMap|economy|season_data_[A-Za-z0-9_]{1,80})$/;
+
+function isValidProfile(p) {
+    return p && typeof p === 'object'
+        && typeof p.id === 'string' && PROFILE_ID_RE.test(p.id)
+        && typeof p.name === 'string' && p.name.length > 0 && p.name.length <= 60;
+}
+
+function exportData() {
+    const data = { version: 1, profiles: spiritProfiles, dataStore: {} };
+    spiritProfiles.forEach(p => {
+        data.dataStore[`${p.id}_spiritExpMap`] = localStorage.getItem(`${p.id}_spiritExpMap`) || '{}';
+        const econ = localStorage.getItem(`${p.id}_economy`);
+        if (econ) data.dataStore[`${p.id}_economy`] = econ;
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith(`${p.id}_season_data_`)) {
+                data.dataStore[key] = localStorage.getItem(key);
+            }
+        }
+    });
+    const blob = new Blob([JSON.stringify(data, null, 4)], {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'sky_season_backup.json';
+    a.click();
+    showToast('📥 匯出成功');
+}
+
+function importData(event) {
+    const file = event.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if(!Array.isArray(data.profiles) || !data.dataStore || typeof data.dataStore !== 'object') {
+                alert('檔案格式錯誤！'); return;
+            }
+            const profiles = data.profiles.filter(isValidProfile);
+            if(profiles.length === 0) { alert('檔案格式錯誤！'); return; }
+            const validIds = new Set(profiles.map(p => p.id));
+
+            let skipped = data.profiles.length - profiles.length;
+            const accepted = [];
+            for (const [key, value] of Object.entries(data.dataStore)) {
+                // key 必須符合本工具格式，且前綴必須屬於這次匯入的 profile
+                const owner = profiles.find(p => key.startsWith(p.id + '_'));
+                if (DATA_KEY_RE.test(key) && owner && validIds.has(owner.id) && typeof value === 'string' && value.length <= 20000) {
+                    accepted.push([key, value]);
+                } else {
+                    skipped++;
+                }
+            }
+            localStorage.setItem('spiritProfiles', JSON.stringify(profiles));
+            accepted.forEach(([k, v]) => localStorage.setItem(k, v));
+            if (skipped > 0) showToast(uiDict[currentLang].importBad);
+            showToast('📤 匯入成功！重新載入中...');
+            setTimeout(() => location.reload(), 1200);
+        } catch (err) { alert('檔案格式錯誤！'); }
+    };
+    reader.readAsText(file);
+}
+
+/* --- 幣別向量工具 --- */
+function addCost(vec, code, n) {
+    if (!n) return vec;
+    vec[code] = (vec[code] || 0) + n;
+    return vec;
+}
+function currencyOf(item) { return item.ctyp || PRIMARY_CURRENCY; }
+
+function calcTotals(){
+    let totalExp = 0;
+    const spent = {};            // 幣別 -> 已花
+    const required = {};         // 幣別 -> 需求（僅計可取得的項目）
+    const spiritTotals = {};     // spiritKey -> {exp, cost:{}}
+    const spiritRequired = {};   // spiritKey -> {}
+
+    items.forEach(i=>{
+        const c = parseFloat(i.cst)||0;
+        const cur = currencyOf(i);
+        if(!spiritRequired[i.spiritKey]) spiritRequired[i.spiritKey] = {};
+        if(!spiritTotals[i.spiritKey]) spiritTotals[i.spiritKey] = {exp:0, cost:{}};
+
+        // 無季卡時，季卡限定項目不計入需求
+        if(isObtainable(i)){
+            addCost(required, cur, c);
+            addCost(spiritRequired[i.spiritKey], cur, c);
+        }
+
+        if(i.unlocked && isObtainable(i)){
+            const e = parseFloat(i.exp)||0;
+            totalExp += e;
+            addCost(spent, cur, c);
+            spiritTotals[i.spiritKey].exp += e;
+            addCost(spiritTotals[i.spiritKey].cost, cur, c);
+        }
+    });
+    return {totalExp, spent, required, spiritTotals, spiritRequired};
+}
+
+const MAX_TIER = 6;              // npc_default 現在有 6 層（舊版只有 5）
+
+/* 各層門檻。先用資料帶的 tiers（來自 trust_tier），沒有才從 items 自行累加。
+   自行累加只在「買光整棵樹剛好升到頂層」時才等價；elder_prairie 那種
+   不自足的樹會算出偏低的門檻，所以有真實值就優先用。 */
+function calcspiritLevels(spiritItems){
+    const sp = spiritItems[0] && spiritData[currentSeason] &&
+               spiritData[currentSeason].spirits[spiritItems[0].spiritCode];
+    const out = {};
+    if (sp && sp.tiers) {
+        for (let lv = 2; lv <= MAX_TIER; lv++) {
+            if (sp.tiers[lv] !== undefined) out[lv] = sp.tiers[lv];
+        }
+        if (Object.keys(out).length) return out;
+    }
+    for (let lv = 2; lv <= MAX_TIER; lv++) {
+        out[lv] = spiritItems.filter(i => i.level < lv)
+                             .reduce((s, i) => s + (parseFloat(i.exp) || 0), 0);
+    }
+    return out;
+}
+
+function calcspiritCurrentExp(spiritKey, spiritItems){
+    const itemsExp = spiritItems.filter(i=>i.unlocked).reduce((sum,i)=>sum+(parseFloat(i.exp)||0),0);
+    return itemsExp + (spiritExpMap[spiritKey] || 0);
+}
+
+function calcMaxLevel(spiritKey, spiritItems){
+    const levelsExp = calcspiritLevels(spiritItems);
+    const currentTotalExp = calcspiritCurrentExp(spiritKey, spiritItems);
+    let maxLevel=1;
+    for(let lv=2; lv<=MAX_TIER; lv++){
+        if(levelsExp[lv] === undefined) break;
+        if(currentTotalExp >= levelsExp[lv]) maxLevel=lv;
+        else break;
+    }
+    return maxLevel;
+}
+
+/* 只用主幣別（季蠟）估天數；其他幣別不隨日產累積，另外顯示缺口 */
+function calcDaysRequired(spent, required) {
+    const need = (required[PRIMARY_CURRENCY] || 0) - (spent[PRIMARY_CURRENCY] || 0);
+    if (need <= 0) return 0;
+    const afterStart = need - initialCandle;
+    if (afterStart <= 0) return 0;
+    return dailyGain > 0 ? Math.ceil(afterStart / dailyGain) : Infinity;
+}
+
+function updateUI(){
+    const t = uiDict[currentLang];
+    const container = document.getElementById('spiritsContainer');
+    if (!container) return;
+    container.innerHTML='';
+    resetAnimations();          // 舊節點已被丟棄，登記表要跟著清空
+
+    const totals = calcTotals();
+    const days = calcDaysRequired(totals.spent, totals.required);
+
+    // --- 動態產生幣別標籤：每個出現過的幣別一組「已花 / 總需求」 ---
+    const row = document.getElementById('totalsRow');
+    row.innerHTML = '';
+    const tag = (label, value) => {
+        const d = document.createElement('div');
+        d.className = 'total-tag';
+        const l = document.createElement('span');
+        l.style.cssText = 'color:inherit;font-weight:bold;font-size:13px;margin:0;';
+        l.textContent = label;
+        const v = document.createElement('span');
+        v.textContent = value;
+        d.appendChild(l); d.appendChild(v);
+        row.appendChild(d);
+    };
+    // 主幣別排前面，其餘依 CURRENCIES 宣告順序
+    const codes = Object.keys(CURRENCIES).filter(c => (totals.required[c] || totals.spent[c]));
+    codes.sort((a, b) => (b === PRIMARY_CURRENCY) - (a === PRIMARY_CURRENCY));
+    codes.forEach(c => {
+        const icon = CURRENCIES[c].icon || '';
+        tag(`${icon}${curLabel(c)} ${t.t3}/${t.t1}:`,
+            `${totals.spent[c] || 0} / ${totals.required[c] || 0}`);
+    });
+    tag(t.t2, Math.round(totals.totalExp));
+    // 常駐先祖沒有季節截止日，天數估算對它們沒有意義
+    if (!isTimeless()) tag(t.t4, Number.isFinite(days) ? days : '∞');
+
+    // 進度條用該分組的主要幣別，而非固定季蠟（常駐是愛心/升華蠟燭）
+    const mainCur = codes[0] || PRIMARY_CURRENCY;
+    const reqP = totals.required[mainCur] || 0;
+    const spentP = totals.spent[mainCur] || 0;
+    const percent = reqP === 0 ? 0 : (spentP / reqP) * 100;
+    document.getElementById('seasonProgressBar').style.width = `${percent}%`;
+
+    if (!hasPass && !isTimeless()) {
+        const note = document.createElement('div');
+        note.className = 'pass-note';
+        note.textContent = t.noPassNote;
+        row.appendChild(note);
+    }
+    // 這一組還有舊版格式的先祖沒收錄，講明以免被當成全集
+    const partial = (spiritData[currentSeason] || {}).partial;
+    if (partial && partial.length) {
+        const note = document.createElement('div');
+        note.className = 'pass-note';
+        note.style.color = 'var(--text-muted)';
+        note.textContent = t.partialNote.replace('{n}', partial.length);
+        row.appendChild(note);
+    }
+
+    const spiritsGrouped = {};
+    items.forEach(i=>{
+        if(!spiritsGrouped[i.spiritKey]) spiritsGrouped[i.spiritKey]=[];
+        spiritsGrouped[i.spiritKey].push(i);
+    });
+
+    const ITEMS_PER_ROW = 3; 
+    const maxRowsPerLevel = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0}; 
+    Object.keys(spiritsGrouped).forEach(spiritKey => {
+        const spiritItems = spiritsGrouped[spiritKey];
+        // 嚮導走自己的 row/col 版面，不吃 maxRowsPerLevel。
+        // 讓它參與計算只會把同季每隻先祖的該層憑空墊高一列空白。
+        if (spiritItems[0].spiritKind === 'guide') return;
+        const lvGroups = {};
+        for(let lv=1; lv<=6; lv++) lvGroups[lv] = spiritItems.filter(i=>i.level===lv);
+        
+        for(let lv=1; lv<=6; lv++){
+            const levelItems = lvGroups[lv];
+            if(levelItems.length === 0) continue;
+            
+            let rowCount = 0;
+            const spiritGroups = {};
+            levelItems.forEach(item=>{
+                const sID = item.spirit || 0;
+                if(!spiritGroups[sID]) spiritGroups[sID]=[];
+                spiritGroups[sID].push(item);
+            });
+            
+            Object.keys(spiritGroups).forEach(sID => {
+                const itemsInspirit = spiritGroups[sID];
+                const ns = itemsInspirit.filter(i=>!i.season).length;
+const ss = itemsInspirit.filter(i=>i.season).length;
+const nonSeasonRows = ns > 0 ? Math.ceil(ns / ITEMS_PER_ROW) : 0;
+// 第一個季節併入非季節最後一列，其餘各佔一列
+const seasonRows = ss > 0 ? (ns > 0 ? ss - 1 : ss) : 0;
+rowCount += nonSeasonRows + seasonRows;
+            });
+            
+            if (rowCount > maxRowsPerLevel[lv]) {
+                maxRowsPerLevel[lv] = rowCount;
+            }
+        }
+    });
+    
+    Object.keys(spiritsGrouped).forEach(spiritKey=>{
+        const spiritItems = spiritsGrouped[spiritKey];
+        const spiritName = spiritItems[0].spiritName;
+        const spiritImage = spiritItems[0].spiritImage;
+        
+        const ancDiv = document.createElement('div');
+        ancDiv.className='spirit';
+        // 嚮導自成一群對齊（它比先祖樹高一倍，拉著大家一起長會空出一大片）
+        if (spiritItems[0].spiritKind === 'guide') ancDiv.classList.add('is-guide');
+
+        const imgPlaceholder = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2RkZCIvPjxwYXRoIGQ9Ik0yNSAxNWwtMTAgMTBoMjB6IiBmaWxsPSIjOTk5Ii8+PC9zdmc+';
+        const img = document.createElement('img');
+        img.src = spiritImage || imgPlaceholder;
+        img.className = 'spirit-image';
+        img.alt = spiritName;
+        img.onerror = () => { img.src = imgPlaceholder; };
+        ancDiv.appendChild(img);
+
+        const header = document.createElement('div');
+        header.className='spirit-header';
+        header.textContent = spiritName;
+        if (spiritItems[0].spiritKind === 'guide') {
+            const badge = document.createElement('span');
+            badge.textContent = ' ' + t.guide;
+            badge.style.cssText = 'font-size:11px;color:var(--text-muted);font-weight:normal;';
+            header.appendChild(badge);
+        }
+        ancDiv.appendChild(header);
+
+        const controlsDiv = document.createElement('div');
+        controlsDiv.className = 'spirit-controls';
+        
+        const currentExpValue = spiritExpMap[spiritKey] || 0;
+
+        const inputGroup = document.createElement('div');
+        inputGroup.className = 'input-group';
+        // 好感度原值 + 換算天數，兩個都顯示（原值方便對照 log，天數方便玩家）
+        inputGroup.textContent = '';
+        const lab = document.createElement('span');
+        lab.textContent = `${t.compExp}: `;
+        const val = document.createElement('b');
+        val.textContent = `${Math.round(currentExpValue)} (${Math.round(currentExpValue / EXP_PER_ITEM * 10) / 10} ${t.day})`;
+        inputGroup.appendChild(lab);
+        inputGroup.appendChild(val);
+        
+        const actionRow = document.createElement('div');
+        actionRow.className = 'input-group';
+        
+        // 以「陪伴天數」輸入，內部換算成好感度（1 天 = EXP_PER_ITEM）
+        const inputExp = document.createElement('input');
+        inputExp.type = 'number';
+        inputExp.min = '1';
+        inputExp.step = '1';
+        inputExp.value = 1;
+        inputExp.title = `1 = ${EXP_PER_ITEM} ${t.exp}`;
+        inputExp.id = `input-${spiritKey}`;
+
+        const btnAddExp = document.createElement('button');
+        btnAddExp.textContent = `${t.addExp}`;
+        btnAddExp.onclick = () => {
+            const days = parseInt(inputExp.value, 10);
+            addspiritExp(spiritKey, (Number.isFinite(days) ? days : 1) * EXP_PER_ITEM);
+        };
+
+        actionRow.appendChild(inputExp);
+        actionRow.appendChild(btnAddExp);
+
+        const btnReset = document.createElement('button');
+        btnReset.className = 'btn-secondary';
+        btnReset.textContent = t.resetSpirit;
+        btnReset.style.marginTop = '4px';
+        btnReset.onclick = () => resetspirit(spiritKey);
+        
+        // 嚮導與長老都不能陪伴 —— 直接看這隻有沒有 companion 節點，
+        // 比列舉種類可靠：資料端不補節點，這裡就自動不給陪伴好感度的顯示與累加。
+        // 重置進度仍然要留著。
+        if (spiritItems.some(i => i.k === 'companion')) {
+            controlsDiv.appendChild(inputGroup);
+            controlsDiv.appendChild(actionRow);
+        }
+        controlsDiv.appendChild(btnReset);
+        ancDiv.appendChild(controlsDiv);
+        
+        const itemsContainer = document.createElement('div');
+        itemsContainer.style.width = '100%';
+        itemsContainer.style.marginBottom = '12px';   // footer 用 margin-top:auto 貼底，這裡給保底留白
+
+        // 嚮導走 row/col 版面：左＝任務鏈、中＝道具與愛心、右＝季節之心獎勵。
+        // 以 tt 切成一個個區塊往上接，每塊配一個 Lv 標籤（對應遊戲內的分隔線）。
+        if (spiritItems[0].spiritKind === 'guide' && spiritItems.some(i => i.row !== undefined)) {
+            // 隱藏畢業禮時右欄整欄釋出，版面不一樣 -> 改用 Python 預算好的 hrow/hcol
+            const RK = hideReward ? 'hrow' : 'row', CK = hideReward ? 'hcol' : 'col';
+            const maxRow = Math.max(...spiritItems.map(i => i[RK] || 0));
+            const maxCol = Math.max(...spiritItems.map(i => i[CK] || 0));
+            const levelOfRow = r => {
+                const it = spiritItems.find(i => i[RK] === r);
+                return it ? it.level : null;
+            };
+            const buildLine = r => {
+                const line = document.createElement('div');
+                line.className = 'items-row';
+                line.style.width = 'auto';
+                for (let c = 0; c <= maxCol; c++) {
+                    const it = spiritItems.find(i => i[RK] === r && i[CK] === c);
+                    if (it) {
+                        line.appendChild(createItemDiv(it, spiritItems, spiritKey, t));
+                    } else {
+                        const gap = document.createElement('div');
+                        gap.className = 'item';
+                        gap.style.cssText = 'visibility:hidden;pointer-events:none;';
+                        line.appendChild(gap);
+                    }
+                }
+                return line;
+            };
+            // 由上往下走，同一 Lv 的連續列收成一個 .level-row 區塊。
+            // .level-row 是 column-reverse：DOM 第一個在視覺最下方，標籤最後加 -> 在最上方。
+            let r = maxRow;
+            while (r >= 0) {
+                const lv = levelOfRow(r);
+                let lo = r;
+                while (lo - 1 >= 0 && levelOfRow(lo - 1) === lv) lo--;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'level-row';
+                for (let rr = lo; rr <= r; rr++) wrapper.appendChild(buildLine(rr));
+                wrapper.appendChild(makeLevelLabel(lv, spiritItems, spiritKey, t));
+                itemsContainer.appendChild(wrapLevelBlock(wrapper, lv, spiritItems, spiritKey));
+                r = lo - 1;
+            }
+            ancDiv.appendChild(itemsContainer);
+            // footer 與其他卡片共用，接著往下走
+            renderFooter(ancDiv, spiritKey, spiritItems, totals, t);
+            container.appendChild(ancDiv);
+            return;
+        }
+
+        const lvGroups = {};
+        for(let lv=1; lv<=6; lv++){ lvGroups[lv] = spiritItems.filter(i=>i.level===lv); }
+
+        // 由上往下繪製 (固定從 Lv.6 到 Lv.1)
+        [6, 5, 4, 3, 2, 1].forEach(level => {
+            if (maxRowsPerLevel[level] === 0) return; // 這個等級所有先祖都沒有，直接跳過
+
+            const levelItems = lvGroups[level] || [];
+            
+            const levelRowWrapper = document.createElement('div');
+            levelRowWrapper.className='level-row';
+
+            // label 後面還要當 insertBefore 的錨點（季節列插在標籤前），所以留著變數
+            const label = makeLevelLabel(level, spiritItems, spiritKey, t);
+            levelRowWrapper.appendChild(label);
+
+            let actualRowsRendered = 0; // 記錄這個先祖在這個 Level 實際畫了幾行
+
+            if (levelItems.length > 0) {
+                const spiritGroups = {};
+                levelItems.forEach(item=>{
+                    const sID = item.spirit || 0;
+                    if(!spiritGroups[sID]) spiritGroups[sID]=[];
+                    spiritGroups[sID].push(item);
+                });
+
+                Object.keys(spiritGroups).sort((a,b)=>a-b).forEach(sID=>{
+                    const itemsInspirit = spiritGroups[sID];
+                    const nonSeason = itemsInspirit.filter(i=>!i.season);
+                    const season = itemsInspirit.filter(i=>i.season);
+
+                    // 非季節：每列最多 ITEMS_PER_ROW 個。
+                    // 第一列靠左，第二列起靠右（同一層放不下而換行時，後續列向右對齊）
+                    for(let i=Math.floor((nonSeason.length-1)/ITEMS_PER_ROW)*ITEMS_PER_ROW; i>=0; i-=ITEMS_PER_ROW){
+                        const slice = nonSeason.slice(i, i+ITEMS_PER_ROW);
+                        const innerRow = document.createElement('div');
+                        innerRow.className='items-row';
+                        innerRow.style.justifyContent = i === 0 ? 'flex-start' : 'flex-end';
+                        slice.forEach(item=>{
+                            innerRow.appendChild(createItemDiv(item, spiritItems, spiritKey, t));
+                        });
+                        levelRowWrapper.insertBefore(innerRow, levelRowWrapper.firstChild);
+                        actualRowsRendered++;
+                    }
+
+                    // 先存好非季節最後一列的參考，之後 insertBefore 會改變 firstChild
+                    const nonSeasonLastRow = nonSeason.length > 0 ? levelRowWrapper.firstChild : null;
+
+                    if(nonSeasonLastRow){
+                        // season[0] 併入非季節那列
+                        if(season.length > 0){
+                            const s0div = createItemDiv(season[0], spiritItems, spiritKey, t);
+                            s0div.style.marginLeft = 'auto'; // ← 加這行，靠右對齊
+                            nonSeasonLastRow.appendChild(s0div);
+                    }
+                        // season[1..n] 各自一列，插在 label 前（正向插入，index 越大越靠近 label = 視覺越上方）
+                        for(let i=1; i<season.length; i++){
+                            const innerRow = document.createElement('div');
+                            innerRow.className='items-row';
+                            innerRow.style.justifyContent = 'flex-end';
+                            innerRow.appendChild(createItemDiv(season[i], spiritItems, spiritKey, t));
+                            levelRowWrapper.insertBefore(innerRow, label);
+                            actualRowsRendered++;
+                        }
+                    } else {
+                        // 沒有非季節，所有季節各自一列，同樣插在 label 前
+                        for(let i=0; i<season.length; i++){
+                            const innerRow = document.createElement('div');
+                            innerRow.className='items-row';
+                            innerRow.style.justifyContent = 'flex-end';
+                            innerRow.appendChild(createItemDiv(season[i], spiritItems, spiritKey, t));
+                            levelRowWrapper.insertBefore(innerRow, label);
+                            actualRowsRendered++;
+                        }
+                    }
+                });
+            } else {
+                // 如果這個先祖沒有這個 Level，把線條和字隱藏，但保留 DOM 結構
+                label.style.visibility = 'hidden';
+                levelRowWrapper.dataset.empty = '1';   // 邊框現在在外層 .level-block 上，包完才處理
+            }
+
+            // --- 核心：補齊缺失的行數 (Invisible Padding) ---
+            const paddingRowsNeeded = maxRowsPerLevel[level] - actualRowsRendered;
+            const imgPlaceholder = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0ibm9uZSIvPjwvc3ZnPg==';
+            
+            for(let r = 0; r < paddingRowsNeeded; r++) {
+                const emptyRow = document.createElement('div');
+                emptyRow.className = 'items-row';
+                emptyRow.style.visibility = 'hidden'; // 設為隱形
+                emptyRow.style.pointerEvents = 'none'; // 防止誤觸
+                
+                // 塞入透明假節點撐開高度
+                emptyRow.innerHTML = `
+                    <div class="item" style="border-color:transparent; background:transparent; box-shadow:none;">
+                        <img src="${imgPlaceholder}">
+                        <div class="nm">_</div>
+                        <div>_</div>
+                        <div>_</div>
+                    </div>
+                `;
+                levelRowWrapper.insertBefore(emptyRow, label);
+            }
+
+            const block = wrapLevelBlock(levelRowWrapper, level, spiritItems, spiritKey);
+            if (levelRowWrapper.dataset.empty) {
+                // 這隻沒有這一層，整塊只是為了跟同季其他卡對齊而留的空白：
+                // 分隔線與進度條都不該出現
+                block.style.borderTopColor = 'transparent';
+                block.querySelector('.lv-seg').style.visibility = 'hidden';
+            }
+            itemsContainer.appendChild(block);
+        });
+        
+        ancDiv.appendChild(itemsContainer);
+
+        renderFooter(ancDiv, spiritKey, spiritItems, totals, t);
+        container.appendChild(ancDiv);
+    });
+
+    alignCardSections(container);   // 全部塞進 DOM 之後才量得到高度
+}
+
+/* 把同一群卡片的「名稱列」「控制列」「footer」補到一樣高，並把整張卡設成同高，
+   讓兌換樹從同一條線開始、footer 落在同一條線上。
+   高度差的來源有二：先祖名字長短不一會折行；嚮導與長老沒有陪伴輸入框，
+   控制列比別人矮一截。這兩個純 CSS 補不了（要的是「同組裡最高的那個」），
+   所以量一次再寫回 min-height。每次重繪跑一次，先清空再量，避免越量越高。
+   footer 也一起補：它靠 margin-top:auto 貼底，高度不同時下緣齊、上緣會差一行。 */
+function alignCardSections(container){
+    // 先祖樹與嚮導分兩群，各自齊平；兩群之間不互相牽動
+    [[...container.querySelectorAll('.spirit:not(.is-guide)')],
+     [...container.querySelectorAll('.spirit.is-guide')]].forEach(cards => {
+        if (!cards.length) return;
+        ['.spirit-header', '.spirit-controls', '.spirit-footer'].forEach(sel => {
+            const els = cards.map(c => c.querySelector(sel)).filter(Boolean);
+            if (!els.length) return;
+            els.forEach(e => { e.style.minHeight = ''; });
+            const h = Math.max(...els.map(e => e.getBoundingClientRect().height));
+            els.forEach(e => { e.style.minHeight = h + 'px'; });
+        });
+        // 區塊補完高度才量得準：卡片等高 -> footer 的 margin-top:auto 自動對齊下緣
+        cards.forEach(c => { c.style.height = ''; });
+        const H = Math.max(...cards.map(c => c.getBoundingClientRect().height));
+        cards.forEach(c => { c.style.height = H + 'px'; });
+    });
+}
+
+/* 卡片底部的幣別小計與可達等級；先祖樹與嚮導共用 */
+function renderFooter(ancDiv, spiritKey, spiritItems, totals, t){
+    const totalspiritExp = calcspiritCurrentExp(spiritKey, spiritItems);
+    const spT = totals.spiritTotals[spiritKey] || {exp:0, cost:{}};
+    const spReq = totals.spiritRequired[spiritKey] || {};
+
+    const footer = document.createElement('div');
+    footer.className = 'spirit-footer';
+    Object.keys(CURRENCIES)
+        .filter(c => spReq[c] || spT.cost[c])
+        .sort((a, b) => (b === PRIMARY_CURRENCY) - (a === PRIMARY_CURRENCY))
+        .forEach(c => {
+            const s = document.createElement('div');
+            s.textContent = `${CURRENCIES[c].icon || ''}${curLabel(c)} ${spT.cost[c] || 0} / ${spReq[c] || 0}`;
+            footer.appendChild(s);
+        });
+    const expLine = document.createElement('div');
+    expLine.textContent = `${t.t2} ${Math.round(totalspiritExp)}`;
+    footer.appendChild(expLine);
+    const sp = spiritData[currentSeason] &&
+               spiritData[currentSeason].spirits[spiritItems[0].spiritCode];
+    if (sp && sp.tier) {
+        const tierLine = document.createElement('div');
+        tierLine.textContent =
+            `${t.tierLbl} ${calcMaxLevel(spiritKey, spiritItems)} / ${sp.tier}`;
+        footer.appendChild(tierLine);
+    }
+    ancDiv.appendChild(footer);
+}
+
+/* 把一個 Lv 區塊包成「左進度條 + 右內容」。
+   區段的區間是 [本層門檻, 下一層門檻]：填滿的那一刻剛好就是升到下一層的那一刻，
+   所以整張卡由下往上看，填充的頂端就是你目前好感度所在的位置。
+   Lv.1 沒有門檻，下界取 0；最高層沒有下一個門檻，達到即視為滿。 */
+function wrapLevelBlock(levelRow, level, spiritItems, spiritKey){
+    const block = document.createElement('div');
+    block.className = 'level-block';
+    const seg = document.createElement('div');
+    seg.className = 'lv-seg';
+    const fill = document.createElement('i');
+
+    const need = calcspiritLevels(spiritItems);
+    const cur  = calcspiritCurrentExp(spiritKey, spiritItems);
+    const lo   = level <= 1 ? 0 : (need[level] !== undefined ? need[level] : 0);
+    const hi   = need[level + 1];
+    let pct;
+    if (hi === undefined || hi <= lo) pct = cur >= lo ? 100 : 0;
+    else pct = Math.max(0, Math.min(1, (cur - lo) / (hi - lo))) * 100;
+
+    fill.style.height = pct + '%';
+    if (pct >= 100) fill.className = 'done';
+    else if (pct > 0) fill.className = 'now';
+    seg.title = hi === undefined ? `Lv.${level}` : `Lv.${level} → Lv.${level + 1}: ${Math.round(cur)} / ${hi}`;
+
+    seg.appendChild(fill);
+    block.appendChild(seg);
+    block.appendChild(levelRow);
+    return block;
+}
+
+/* 等級標籤：Lv.N 後面直接標出升到這一層所需的總好感度。
+   原本這個數字只有在使用者點了超過可達等級的項目時，才會從 alert 跳出來；
+   標在標籤上就不用先踩錯誤才知道門檻。
+   Lv.1 沒有門檻（calcspiritLevels 從 2 起算），所以只有層名。
+   已達成的畫成綠色，沒達成的沿用 muted —— 一眼看出卡在哪一層。 */
+function makeLevelLabel(level, spiritItems, spiritKey, t){
+    const label = document.createElement('div');
+    label.className = 'level-label';
+    label.textContent = 'Lv.' + level;
+    const need = calcspiritLevels(spiritItems)[level];
+    if (need !== undefined) {
+        const span = document.createElement('span');
+        span.className = 'lv-need';
+        span.textContent = ` ${t.needExp} ${need}`;
+        if (calcspiritCurrentExp(spiritKey, spiritItems) >= need) span.classList.add('met');
+        label.appendChild(span);
+    }
+    return label;
+}
+
+function createItemDiv(item, spiritItems, spiritKey, t){
+    const div = document.createElement('div');
+    div.className = 'item';
+    if(item.unlocked) div.classList.add('unlocked');
+    if(item.season) div.classList.add('season');
+    const locked = !isObtainable(item);
+    if(locked) div.classList.add('locked');
+
+    const placeholder = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2RkZCIvPjxwYXRoIGQ9Ik0yNSAxNWwtMTAgMTBoMjB6IiBmaWxsPSIjOTk5Ii8+PC9zdmc+';
+
+    // 以 DOM API 建構，避免把資料欄位直接拼進 innerHTML
+    const img = document.createElement('img');
+    img.className = 'item-img';
+    // 有「開啟態」的類別（目前只有等級解鎖）勾選後換圖；點擊會整個 updateUI 重繪
+    const openImg = item.unlocked ? imageData[`item.${item.k}.open`] : null;
+    const frames = !openImg && Array.isArray(item.image) ? item.image : null;
+    img.src = openImg || firstFrame(item.image) || placeholder;
+    img.onerror = () => { img.src = placeholder; };
+    div.appendChild(img);
+    if (frames && frames.length > 1) registerAnimation(img, frames);
+
+    // 名稱那行掛 class：緊湊模式要單獨把它壓成一行（CSS .item .nm）
+    const line = (txt, cls) => {
+        const d = document.createElement('div');
+        d.textContent = txt;
+        if (cls) d.className = cls;
+        div.appendChild(d);
+    };
+    // 數字那兩行同時放「完整」與「縮寫」兩版，用 CSS 切（見 body.compact .full/.short）。
+    // 縮寫版是為了讓 46px 的格子一行放得下：「季節之心: 2」會折行，「💙2」不會。
+    const numLine = (full, short) => {
+        const d = document.createElement('div');
+        const a = document.createElement('span'); a.className = 'full'; a.textContent = full;
+        const b = document.createElement('span'); b.className = 'short'; b.textContent = short;
+        d.append(a, b);
+        div.appendChild(d);
+    };
+    const cur = currencyOf(item);
+    line(item.nm, 'nm');
+    numLine(`${curLabel(cur)}: ${item.cst}`, `${(CURRENCIES[cur] || {}).icon || ''}${item.cst}`);
+    numLine(`${t.exp}: ${item.exp}`, `♡${item.exp}`);
+    div.title = item.nm;                  // 緊湊模式名稱被截斷，全名靠 tooltip
+
+    if(locked){
+        div.title = t.noPassNote;
+        return div;                       // 不綁 click，無季卡項目不可勾選
+    }
+
+    div.addEventListener('click', ()=>{
+        const maxLevel = calcMaxLevel(spiritKey, spiritItems);
+        if(item.level <= maxLevel || item.unlocked){
+            item.unlocked=!item.unlocked;
+            saveState();
+            updateUI();
+        } else {
+            alert(`⚠️ ${t.errReq} ${item.spiritName} (Lv.${item.level})。\n${t.errReq2} ${calcspiritLevels(spiritItems)[item.level]||'??'}。`);
+        }
+    });
+    return div;
+}
+
+function addspiritExp(spiritKey, amount){
+    if(amount > 0){
+        spiritExpMap[spiritKey] = (spiritExpMap[spiritKey] || 0) + amount;
+        saveState();
+        updateUI();
+    }
+}
+
+function resetspirit(spiritKey){
+    if(confirm(`確定要重置這位先祖的進度嗎？`)){
+        items.filter(i => i.spiritKey === spiritKey).forEach(i => i.unlocked = false);
+        spiritExpMap[spiritKey] = 0;
+        saveState();
+        updateUI();
+    }
+}
+
+function resetSeason(){
+    if(confirm(`⚠️ 確定要重置當前季節的所有進度嗎？`)){
+        items.forEach(i=>i.unlocked=false);
+        Object.keys(spiritExpMap).forEach(key => {
+            spiritExpMap[key] = 0;
+        });
+        saveState();
+        updateUI();
+        showToast('🔄 季節已重置');
+    }
+}
+
+initApp();
+</script>
+</body>
+</html>
