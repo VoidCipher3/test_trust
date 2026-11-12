@@ -2,8 +2,14 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
+<!-- CSP：這個站沒有後端，真正要擋的是「萬一有 XSS，別讓它載外部腳本或把資料傳出去」。
+     connect-src 'self' 讓 fetch/XHR 只能打同源，script-src 不含外部來源。
+     'unsafe-inline' 拿不掉 —— 整頁是單檔內嵌 script 與 onclick 屬性，
+     所以這道 CSP 擋不了「已經存在的 XSS 執行」，只擋得了外傳與外部載入。
+     frame-ancestors 用 meta 無效（只能走 HTTP header），要防嵌入得在 Pages 設 header。 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https://skyinfoweb.pages.dev data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>季節解鎖計算器 | Season Spirit Calculator</title>
+<title>先祖解鎖計算器 | SpiritUnlock Calculator</title>
 
 <style>
 /* --- CSS 變數：輕鬆管理亮/暗色主題 --- */
@@ -19,8 +25,8 @@
     --danger-color: #e74c3c;
     --success-color: #4a9ed4;
     --success-bg: #eef6fc;
-    --season-color: #3b82f6;
-    --season-bg: #e6eefd;
+    --season-color: #ff9800;
+    --season-bg: #fff3e0;
     --item-bg: #fdfdfd;
     --icon-bg: #f3f5f8;
     --icon-border: rgba(0,0,0,0.04);
@@ -53,24 +59,24 @@
 
 [data-theme="dark"] {
     /* 配色取自檔案 2：深紫黑底 #0c0818；強調色由淺紫(#b892ff)改為淺藍 */
-    --bg-color: #0c0818;
-    --text-color: #efeaf8;
-    --text-muted: #a49cb8;
-    --card-bg: #130e23;
-    --header-bg: linear-gradient(135deg, #14102a, #1d2a52);
-    --border-color: #2c2542;
-    --primary-color: #7cc4ff;
+    --bg-color: #1a1a20;
+    --text-color: #f0f0f0;
+    --text-muted: #aaa;
+    --card-bg: #2a2a35;
+    --header-bg: linear-gradient(135deg, #1e3c72, #2a5298);
+    --border-color: #444;
+    --primary-color: #4e8cf5;
     --primary-hover: #9bd2ff;
-    --item-bg: #0f0a1d;
+    --item-bg: #33333e;
     --success-color: #4a9ed4;
     --success-bg: #07121f;
-    --season-color: #3d8bff;
-    --season-bg: #0a1d4a;
+    --season-color: #d35400;
+    --season-bg: #5a2e15;
     --icon-bg: #030913;
     --icon-border: rgba(120,170,230,0.10);
-    --shadow: 0 4px 12px rgba(0,0,0,0.45);
-    --item-shadow:       0 1px 2px rgba(0,0,0,0.5);
-    --item-shadow-hover: 0 6px 16px rgba(0,0,0,0.65);
+    --shadow: 0 4px 12px rgba(0,0,0,0.3);
+    --item-shadow:       0 1px 2px rgba(0,0,0,0.35);
+    --item-shadow-hover: 0 6px 16px rgba(0,0,0,0.55);
 }
 
 * { box-sizing: border-box; }
@@ -204,10 +210,34 @@ body.compact .lv-now { font-size: 8px; padding: 1px 3px; }
 /* 按下去的回饋，觸控也吃得到 */
 .item:active { transform: translateY(-1px); box-shadow: var(--item-shadow); }
 .item.unlocked { border-color: var(--success-color); background-color: var(--success-bg); }
-.item.season { border-color: var(--season-color); background-color: var(--season-bg); border-style: dashed; box-shadow: 0 0 0 1px var(--season-color), 0 0 10px -2px var(--season-color); }
-.item.unlocked.season { border-color: var(--success-color); background-color: var(--success-bg); border-style: solid; box-shadow: var(--item-shadow); }
 .item.locked { opacity: 0.35; filter: grayscale(1); cursor: not-allowed; }
-.item img { width: 50px; height: 50px; margin: 0 auto; padding: 4px; border-radius: 12px; object-fit: contain; background: var(--icon-bg); border: 1px solid var(--icon-border); }
+/* 季卡限定：原本是整格染橘＋虛線框，問題是它跟「已解鎖＝綠框」搶同一個通道——
+   季卡物品一解鎖就得把橘色整套蓋掉，兩種狀態不能同時看見。改成圖示右上角
+   掛一枚季節徽章：狀態（綠框）跟來源（徽章）各佔一個通道，互不干擾。
+   徽章絕對定位，不佔版面，所以格高維持 103px／緊湊 72px，分層不會跑掉。
+   位置是算出來的，不是試出來的：格寬 78 − 框 1×2 − 內距 4×2 = 內容 68，
+   圖 50 置中 → 圖右緣距格右緣 14px；徽章 16px 擺 right:8 讓它壓住圖的右上角，
+   同時不越出格子（越出會撞到上一列）。 */
+/* 季節項鍊本身就是一枚深底白紋的圓形徽章，自帶對比，所以不墊底色也不描邊 ——
+   只加一層投影把它跟底下的圖示分開。 */
+.pass-badge { position: absolute; top: 0; left: 6px; width: 19px; height: 19px; z-index: 2;
+              display: flex; align-items: center; justify-content: center;
+              pointer-events: none; font-size: 10px; line-height: 1; color: #fff;
+              filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.45)); }
+/* 主圖的規則一律用 .item > img（直接子層）。角標的圖包在 <i> 裡，不是直接子層，
+   所以吃不到 width:50px 那組 —— 用子選擇器而不是靠加權重去壓，衝突從源頭消失。 */
+.pass-badge img { width: 150%; height: 150%; padding: 0; margin: 0; border: 0; border-radius: 0;
+                  background: none; object-fit: contain; }
+/* 退路：圖載不到（離線版、CDN 掛掉）才需要自己畫一個看得見的標記。
+   這時沒有自帶對比了，才補墊底＋兩層外圈 —— 白圈在深色主題描邊，黑圈在淺色主題描邊。 */
+.pass-badge.glyph { width: 14px; height: 14px; top: 2px; right: 9px; filter: none;
+                    border-radius: 50%; background: rgba(0,0,0,0.58);
+                    box-shadow: 0 0 0 1px rgba(255,255,255,0.45), 0 0 0 2px rgba(0,0,0,0.22); }
+.pass-badge.glyph::after { content: '✦'; }
+/* 白色線稿染色後，純白在淺色底、深色在深色底都會糊掉，墊一塊中性底色解決。
+   用 rgba 灰而不是主題變數：它要在兩種主題下都提供對比。 */
+.item > img.tinted, .search-row img.tinted { background: rgba(128,128,128,0.16); }
+.item > img { width: 50px; height: 50px; margin: 0 auto; padding: 4px; border-radius: 12px; object-fit: contain; background: var(--icon-bg); border: 1px solid var(--icon-border); }
 /* 每一格的高度必須固定，否則同一列在不同卡片上高度不同，Lv 區塊就對不齊。
    做法：圖固定 50px、三行字各鎖一行不換行。格寬加大到 76px 是為了讓
    最長的幣別標籤（「季節之心: 1」/「Ascended: 250」）排得下，不必截字。 */
@@ -215,6 +245,35 @@ body.compact .lv-now { font-size: 8px; padding: 1px 3px; }
 .item div { font-size: 10px; margin-top: 3px; line-height: 1.2; word-break: normal; font-weight: 500;}
 /* 數字那兩行縮一級：英文的「Ascended: 250」在 10px 會被截掉，數字被截比名稱被截嚴重 */
 .item div:not(.nm) { font-size: 9px; }
+
+/* ═══ 搜尋、分享、離線匯出 ═══ */
+.search-box { position: relative; }
+.search-box input { width: 150px; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--field-border);
+    background: var(--field-bg); color: var(--text-color); font-size: 13px; outline: none; }
+.search-box input:focus { border-color: var(--primary-color); }
+/* 結果清單浮在控制列上方，不擠動版面 */
+.search-results { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; width: 320px; max-height: 340px;
+    overflow-y: auto; background: var(--card-bg); border: 1px solid var(--outline); border-radius: 10px;
+    box-shadow: var(--shadow); text-align: left; }
+.search-row { display: flex; align-items: center; gap: 8px; padding: 7px 9px; cursor: pointer; font-size: 12px;
+    border-bottom: 1px solid var(--divider); }
+.search-row:last-child { border-bottom: none; }
+.search-row:hover, .search-row.active { background: var(--field-bg); }
+.search-row img { width: 26px; height: 26px; object-fit: contain; flex: 0 0 auto; border-radius: 5px; }
+.search-row .s-main { font-weight: bold; color: var(--text-color); }
+.search-row .s-sub { color: var(--text-muted); font-size: 11px; }
+.search-row .s-cost { margin-left: auto; color: var(--text-muted); white-space: nowrap; font-size: 11px; }
+.search-empty { padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px; }
+/* 跳過去之後閃兩下，不然在一堆格子裡找不到剛剛點的是哪個 */
+.item.flash { animation: itemFlash 0.7s ease-out 3; }
+@keyframes itemFlash {
+    0%, 100% { box-shadow: var(--item-shadow); }
+    50% { box-shadow: 0 0 0 3px var(--primary-color), 0 0 14px -2px var(--primary-color); }
+}
+.share-bar { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+    margin: 0 auto 10px; padding: 10px 14px; max-width: 850px; width: 95%; border-radius: 12px;
+    background: var(--field-bg); border: 1px solid var(--primary-color); font-size: 13px; color: var(--text-color); }
+.share-bar b { color: var(--primary-color); }
 
 /* ═══ 緊湊模式：只改尺寸，版面邏輯不動 ═══ */
 /* --- 緊湊模式 --- */
@@ -228,7 +287,10 @@ body.compact .item { width: 46px; padding: 3px; border-radius: 10px; }
 body.compact .item div { font-size: 9px; margin-top: 1px; line-height: 1.15; }
 /* 圖示不跟著格寬縮：格子要夠寬才塞得下「季蠟: 12」一行，但高度要靠小圖省，
    所以這裡把圖固定 30px，不用 width:100%（一縮就是正方形，寬高一起掉）。 */
-body.compact .item img { width: 30px; height: 30px; margin: 0 auto; padding: 2px; border-radius: 8px; }
+body.compact .item > img { width: 30px; height: 30px; margin: 0 auto; padding: 2px; border-radius: 8px; }
+/* 緊湊：格寬 46 − 1×2 − 3×2 = 38，圖 30 置中 → 圖右緣距格右緣 8px */
+body.compact .pass-badge { width: 13px; height: 13px; right: 3px; top: 0; font-size: 7px; }
+body.compact .pass-badge.glyph { width: 10px; height: 10px; right: 5px; top: 1px; }
 .item .short { display: none; }
 body.compact .item .full { display: none; }
 body.compact .item .short { display: inline; }
@@ -274,7 +336,7 @@ body.compact .spirit-header { font-size: 14px; }
             <option value="en">English</option>
         </select>
     </div>
-    <div class="header-title" id="ui-title">季節先祖解鎖計算器</div>
+    <div class="header-title" id="ui-title">先祖解鎖計算器</div>
     <div class="top-controls">
         <button class="top-btn" onclick="toggleTheme()">🌓 Theme</button>
         <a href="index.html" class="top-btn">🏠 Home</a>
@@ -317,11 +379,18 @@ body.compact .spirit-header { font-size: 14px; }
             <span id="ui-initial">起始季蠟</span>
             <input type="number" id="initialCandle" min="0" step="1" onchange="updateEconomy()">
         </div>
+        <div class="num-field search-box">
+            <input type="text" id="searchInput" placeholder="搜尋項目" autocomplete="off"
+                   oninput="runSearch()" onkeydown="searchKey(event)" onblur="setTimeout(closeSearch, 150)">
+            <div class="search-results" id="searchResults" style="display:none"></div>
+        </div>
         <select id="seasonSelect" onchange="switchSeason()"></select>
         <button class="btn-reset" onclick="resetSeason()" id="ui-reset-season">重置當前季節</button>
         <button class="btn-secondary" onclick="exportData()" id="ui-export">📥 匯出</button>
         <button class="btn-secondary" onclick="document.getElementById('importFile').click()" id="ui-import">📤 匯入</button>
         <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importData(event)">
+        <button class="btn-secondary" onclick="shareLink()" id="ui-share">🔗 分享連結</button>
+        <button class="btn-secondary" onclick="exportOffline()" id="ui-offline">💾 離線版</button>
 
         <div class="collapsible-header" id="changelog-header" onclick="toggleChangelog()" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
         <span>📝 更新紀錄</span>
@@ -334,17 +403,20 @@ body.compact .spirit-header { font-size: 14px; }
     </div>
 </div>
 
+<!-- 染色用的 filter 定義，執行時動態加進來（見 tintFilter） -->
+<svg id="tintDefs" width="0" height="0" style="position:absolute;pointer-events:none" aria-hidden="true"></svg>
+<div id="shareBar" class="share-bar" style="display:none"></div>
 <div id="spiritsContainer"></div>
 <div id="toastContainer"></div>
 
 <script>
 const uiDict = {
-    'zh-hant': { langLabel: '語言', title: '先靈解鎖計算器', home: '🏠 首頁', addProf: '➕ 新增方案', delProf: '刪除', t1: '總需求', t2: '總好感度:', t3: '已花', t4: '還需天數:', resetSeason: '重置當前季節', compExp: '陪伴好感度', resetSpirit: '重置進度', cst: '季蠟', exp: '好感', profPrompt: '請輸入自定義解鎖方案名稱：', errReq: '你還不能解鎖', errReq2: '需要總好感度達到', export: '📥 匯出', import: '📤 匯入', addExp: '增加', day: '天', guide: '(嚮導)', tierLbl: '可達等級', partialNote: '本季另有 {n} 隻舊版格式先祖尚未收錄',
-        pass: '擁有季卡且季節進行中', hideReward: '隱藏畢業禮與季節項鍊', compact: '緊湊模式', needExp: '需', daily: '每日季蠟', initial: '起始季蠟', noPassNote: '無季卡：季卡限定項目（含季心）無法取得', importBad: '⚠️ 匯入檔含不合法欄位，已略過' },
+    'zh-hant': { langLabel: '語言', title: '先祖解鎖計算器', home: '🏠 首頁', addProf: '➕ 新增方案', delProf: '刪除', t1: '總需求', t2: '總好感度:', t3: '已花', t4: '還需天數:', resetSeason: '重置當前季節', compExp: '陪伴好感度', resetSpirit: '重置進度', cst: '季蠟', exp: '好感', profPrompt: '請輸入自定義解鎖方案名稱：', errReq: '你還不能解鎖', errReq2: '需要總好感度達到', export: '📥 匯出', import: '📤 匯入', addExp: '增加', day: '天', guide: '(嚮導)', tierLbl: '可達等級', partialNote: '本季另有 {n} 隻舊版格式先祖尚未收錄',
+        pass: '擁有季卡且季節進行中', hideReward: '隱藏畢業禮與季節項鍊', search: '搜尋項目', searchNone: '找不到符合的項目', saveFail: '⚠️ 進度存不進去（瀏覽器儲存空間已滿或被封鎖）', searchMore: '顯示前 {shown} 筆，共 {total} 筆，再輸入細一點', searchHidden: '這個項目目前被隱藏（取消「隱藏畢業禮」才看得到）', share: '🔗 分享連結', shareCopied: '連結已複製', shareViewing: '正在檢視分享的進度（唯讀）', shareApply: '套用到我的方案', shareLeave: '離開', shareApplied: '已套用', shareReadonly: '唯讀模式，請先套用或離開', shareStale: '這個連結是舊版資料產生的，無法對應目前的項目', offline: '💾 離線版', offlineWait: '打包中…', offlineDone: '已下載單檔離線版', offlineFail: '匯出失敗，請用瀏覽器開啟（不能從本機檔案匯出）', compact: '緊湊模式', needExp: '需', daily: '每日季蠟', initial: '起始季蠟', noPassNote: '無季卡：季卡限定項目（含季心）無法取得', importBad: '⚠️ 匯入檔含不合法欄位，已略過' },
     'zh': { langLabel: '语言', title: '先祖解锁计算器', home: '🏠 首页', addProf: '➕ 新增方案', delProf: '删除', t1: '总需求', t2: '总好感度:', t3: '已花', t4: '还需天数:', resetSeason: '重置当前季节', compExp: '陪伴好感度', resetSpirit: '重置进度', cst: '季蜡', exp: '好感', profPrompt: '请输入自定义解锁方案名称：', errReq: '你还不能解锁', errReq2: '需要总好感度达到', export: '📥 导出', import: '📤 导入', addExp: '增加', day: '天', guide: '(向导)', tierLbl: '可达等级', partialNote: '本季另有 {n} 只旧版格式先祖尚未收录',
-        pass: '拥有季卡且季节进行中', hideReward: '隐藏毕业礼与季节项链', compact: '紧凑模式', needExp: '需', daily: '每日季蜡', initial: '起始季蜡', noPassNote: '无季卡：季卡限定项目（含季心）无法取得', importBad: '⚠️ 导入档含不合法栏位，已略过' },
+        pass: '拥有季卡且季节进行中', hideReward: '隐藏毕业礼与季节项链', search: '搜索项目', searchNone: '找不到符合的项目', saveFail: '⚠️ 进度存不进去（浏览器存储空间已满或被封锁）', searchMore: '显示前 {shown} 笔，共 {total} 笔，再输入细一点', searchHidden: '这个项目目前被隐藏（取消「隐藏毕业礼」才看得到）', share: '🔗 分享链接', shareCopied: '链接已复制', shareViewing: '正在查看分享的进度（只读）', shareApply: '套用到我的方案', shareLeave: '离开', shareApplied: '已套用', shareReadonly: '只读模式，请先套用或离开', shareStale: '这个链接是旧版数据生成的，无法对应目前的项目', offline: '💾 离线版', offlineWait: '打包中…', offlineDone: '已下载单档离线版', offlineFail: '导出失败，请用浏览器打开（不能从本地文件导出）', compact: '紧凑模式', needExp: '需', daily: '每日季蜡', initial: '起始季蜡', noPassNote: '无季卡：季卡限定项目（含季心）无法取得', importBad: '⚠️ 导入档含不合法栏位，已略过' },
     'en': { langLabel: 'Lang', title: 'Spirit Calculator', home: '🏠 Home', addProf: '➕ Add Profile', delProf: 'Delete', t1: 'Required', t2: 'Total Affection:', t3: 'Spent', t4: 'Days Left:', resetSeason: 'Reset Season', compExp: 'Companion Aff.', resetSpirit: 'Reset Progress', cst: 'Cost', exp: 'Aff.', profPrompt: 'Enter profile name:', errReq: 'Cannot unlock', errReq2: 'Requires total affection:', export: '📥 Export', import: '📤 Import', addExp: 'Add', day: 'd', guide: '(Guide)', tierLbl: 'Max tier', partialNote: '{n} more legacy-format spirits in this season are not yet included',
-        pass: 'Have Season Pass and Season In Progress', hideReward: 'Hide Season Heart items', compact: 'Compact', needExp: 'need', daily: 'Candles/day', initial: 'Starting', noPassNote: 'No pass: pass-exclusive items (incl. Season Heart) are unobtainable', importBad: '⚠️ Import contained invalid keys; they were skipped' }
+        pass: 'Have Season Pass and Season In Progress', hideReward: 'Hide Season Heart items', search: 'Search items', searchNone: 'No matching item', saveFail: '⚠️ Could not save progress (storage full or blocked)', searchMore: 'Showing {shown} of {total} — refine the search', searchHidden: 'That item is hidden right now (turn off "Hide Season Heart items")', share: '🔗 Share link', shareCopied: 'Link copied', shareViewing: 'Viewing shared progress (read-only)', shareApply: 'Apply to my profile', shareLeave: 'Leave', shareApplied: 'Applied', shareReadonly: 'Read-only — apply or leave first', shareStale: 'This link was made from older data and no longer lines up', offline: '💾 Offline file', offlineWait: 'Packing...', offlineDone: 'Offline single-file saved', offlineFail: 'Export failed — open the page over http, not from a local file', compact: 'Compact', needExp: 'need', daily: 'Candles/day', initial: 'Starting', noPassNote: 'No pass: pass-exclusive items (incl. Season Heart) are unobtainable', importBad: '⚠️ Import contained invalid keys; they were skipped' }
 };
 
 
@@ -365,6 +437,61 @@ function curLabel(code) {
 const PASS_ECONOMY = { withPass: { daily: 6 }, noPass: { daily: 5 } };
 
 const versionData = [
+    { ver: 'v2.0.0', date: '2026-11-12',
+        changes: {
+            'zh-hant': [
+                '版面改為水平卷軸：所有先祖排成一條，左右滑動切換，手機頁高大幅縮短',
+                '新增緊湊模式（手機預設開啟），單格高度減少三成',
+                '新增跨分組搜尋：輸入項目、先祖或季節名即可跳到該格並閃爍標示',
+                '新增分享連結：把當前分組的進度壓成網址，對方開啟為唯讀檢視，可選擇套用',
+                '新增單檔離線版匯出：資料內嵌進 HTML，可直接雙擊開啟，不需網路或伺服器',
+                '新增「隱藏畢業禮與季節項鍊」開關，隱藏的項目不計入統計（每季各自記住）',
+                '每層標題直接標出升級所需好感度，不必點了才知道門檻',
+                '新增左側分段式好感度進度條，填滿高度對應目前好感度所在的層級',
+                '同組卡片的控制列、兌換樹起點與底部統計自動對齊；嚮導因高度差異獨立成群',
+                '重寫嚮導版面規則（依分隔線切區塊、任務靠左、愛心與獎勵的欄位配置）',
+                '修正 ap29 以後嚮導的好感度來源：任務數值改由遊戲任務定義檔提供',
+                '圖片全面改用 skyinfoweb，動作類改為多幀動畫，等級解鎖圖示依解鎖狀態切換',
+                '三語翻譯改以遊戲內字串為準，修正簡中與英文欄位殘留繁體字的問題',
+                '長老與嚮導不再顯示陪伴欄位',
+                '項目格改為細邊框，加上靜止與滑鼠移入兩種狀態'
+            ],
+            'zh': [
+                '版面改为水平卷轴：所有先祖排成一条，左右滑动切换，手机页高大幅缩短',
+                '新增紧凑模式（手机默认开启），单格高度减少三成',
+                '新增跨分组搜索：输入项目、先祖或季节名即可跳到该格并闪烁标示',
+                '新增分享链接：把当前分组的进度压成网址，对方打开为只读查看，可选择套用',
+                '新增单档离线版导出：数据内嵌进 HTML，可直接双击打开，不需网络或服务器',
+                '新增"隐藏毕业礼与季节项链"开关，隐藏的项目不计入统计（每季各自记住）',
+                '每层标题直接标出升级所需好感度，不必点了才知道门槛',
+                '新增左侧分段式好感度进度条，填满高度对应目前好感度所在的层级',
+                '同组卡片的控制列、兑换树起点与底部统计自动对齐；向导因高度差异独立成群',
+                '重写向导版面规则（依分隔线切区块、任务靠左、爱心与奖励的栏位配置）',
+                '修正 ap29 以后向导的好感度来源：任务数值改由游戏任务定义档提供',
+                '图片全面改用 skyinfoweb，动作类改为多帧动画，等级解锁图标依解锁状态切换',
+                '三语翻译改以游戏内字串为准，修正简中与英文栏位残留繁体字的问题',
+                '长老与向导不再显示陪伴栏位',
+                '项目格改为细边框，加上静止与鼠标移入两种状态'
+            ],
+            'en': [
+                'Horizontal layout: spirits sit in one row and scroll sideways, cutting page height on phones',
+                'Added compact mode (on by default on phones), about 30% shorter cells',
+                'Added search across every group: type an item, spirit or season name to jump to that cell',
+                'Added share links: the current group\'s progress is packed into the URL as a read-only view the recipient can apply',
+                'Added single-file offline export: data is inlined into the HTML so it opens straight from disk',
+                'Added a "Hide Season Heart items" toggle; hidden items are left out of the totals (remembered per season)',
+                'Each tier heading now shows the affection needed to reach it',
+                'Added a segmented affection bar on the left of each card',
+                'Controls, tree start and footer now line up across cards in a group; guides align as their own group',
+                'Rewrote the guide layout rules (tier blocks, quests on the left, heart and reward column placement)',
+                'Fixed affection for ap29+ guides: quest values now come from the game quest definitions',
+                'All images now come from skyinfoweb, emotes animate, and the tier icon follows the unlocked state',
+                'Translations now follow the in-game strings; fixed Traditional text left in the Simplified and English columns',
+                'Elders and guides no longer show the companion field',
+                'Thinner item borders with distinct resting and hover states'
+            ]
+        }
+    },
     { ver: 'v1.0.0', date: '2026-07-04',
         changes: {
             'zh-hant': [
@@ -554,28 +681,387 @@ function initApp() {
     
     // data 與 i18n 分家：data 機器產（可隨時覆蓋），i18n 人工養（只累加）
     // 三份檔案：data 機器產（可覆蓋），i18n 與 images 人工養（只累加）
-    Promise.all([
-        fetch('data/spirits.data.json').then(r => r.json()),
-        fetch('data/spirits.i18n.json').then(r => r.json()),
-        fetch('data/spirits.images.json').then(r => r.json()).catch(() => ({}))
-    ]).then(([data, i18n, imgs]) => {
-        spiritData = data;
-        i18nData = i18n;
-        imageData = imgs || {};
-        updateUIText();
-        updateProfileDropdown();
-        loadLangData();
+    // 單檔離線版把三份資料內嵌在 <script id="embedded-data"> 裡，優先用它。
+    // file:// 下 fetch 相對路徑會被 CORS 擋，所以離線版非這樣不可。
+    const embedded = document.getElementById('embedded-data');
+    const source = embedded
+        ? Promise.resolve(JSON.parse(embedded.textContent))
+        : Promise.all([
+            fetch('data/spirits.data.json').then(r => r.json()),
+            fetch('data/spirits.i18n.json').then(r => r.json()),
+            fetch('data/spirits.images.json').then(r => r.json()).catch(() => ({}))
+          ]).then(([data, i18n, images]) => ({ data, i18n, images }));
+
+    source.then(bundle => {
+        spiritData = bundle.data;
+        i18nData = bundle.i18n;
+        imageData = bundle.images || {};
     }).catch(err => {
+        // 這個 catch 只蓋「拿不到資料」。渲染期的例外交給下面那個，
+        // 否則一個 ReferenceError 會被報成「無法載入資料」，查錯方向全錯。
+        console.error('[load]', err);
         document.getElementById('spiritsContainer').textContent =
             '無法載入資料 (Failed to load data).';
         document.getElementById('spiritsContainer').style.cssText =
             'color:red;text-align:center;';
+        throw err;
+    }).then(() => {
+        updateUIText();
+        updateProfileDropdown();
+        const shared = readShareHash();
+        if (shared) { sharedView = shared; currentSeason = shared.g; }
+        loadLangData();
+        if (sharedView) renderShareBar();
+    }).catch(err => {
+        if (!err || !err.__shown) console.error('[render]', err);
     });
     renderChangelog();
     if (localStorage.getItem('sky_tool_changelog_collapsed') !== '0') {
         document.getElementById('changelog-body').classList.add('collapsed');
         document.getElementById('changelog-header').classList.add('collapsed');
     }
+}
+
+/* ══════════ 搜尋 ══════════
+   跨全部分組搜尋，不限當前這一組 —— 常見的需求是「看到別人穿某件衣服，
+   想知道在誰身上、要多少蠟」，那件東西通常不在你正在看的季節。
+   索引只存座標（分組／先祖／索引），名稱在查詢時才查 i18n，
+   這樣切語言不必重建索引。1219 筆的線性掃描在手機上也是個位數毫秒。 */
+let searchIndex = null;
+let searchHits = [];
+let searchCursor = -1;
+
+function buildSearchIndex() {
+    const out = [];
+    Object.keys(spiritData).forEach(gk => {
+        const g = spiritData[gk];
+        Object.keys(g.spirits).forEach(code => {
+            g.spirits[code].items.forEach((it, idx) => {
+                out.push({ g: gk, code, idx, lv: it.level, k: it.k, src: it.src,
+                           cst: it.cst, ctyp: it.ctyp, tn: it.tn });
+            });
+        });
+    });
+    return out;
+}
+
+function runSearch() {
+    const box = document.getElementById('searchResults');
+    const q = document.getElementById('searchInput').value.trim().toLowerCase();
+    if (q.length < 1) { closeSearch(); return; }
+    if (!searchIndex) searchIndex = buildSearchIndex();
+
+    const t = uiDict[currentLang];
+    // 全表掃描，不提前中斷。1219 筆在降速 4 倍的手機上是 3~9ms，
+    // 中斷反而會讓排在資料後段的分組（常駐、長老）永遠搜不到。
+    searchHits = [];
+    for (const e of searchIndex) {
+        const nm = itemName(e.k), sp = spiritName(e.code), gp = t18(`group.${e.g}`);
+        const ln = nm.toLowerCase();
+        // 名稱完全相同 > 名稱開頭 > 名稱包含 > 只有先祖或分組名對上
+        let rank = -1;
+        if (ln === q) rank = 0;
+        else if (ln.startsWith(q)) rank = 1;
+        else if (ln.includes(q)) rank = 2;
+        else if (sp.toLowerCase().includes(q) || gp.toLowerCase().includes(q)) rank = 3;
+        if (rank >= 0) searchHits.push(Object.assign({ nm, sp, gp, rank }, e));
+    }
+    searchHits.sort((a, b) => a.rank - b.rank);     // 同 rank 維持資料順序
+    searchCursor = -1;
+    if (!searchHits.length) {
+        const em = document.createElement('div');
+        em.className = 'search-empty';
+        em.textContent = t.searchNone || 'No match';
+        box.innerHTML = '';
+        box.appendChild(em);
+        box.style.display = ''; return;
+    }
+    box.innerHTML = '';
+    const SHOWN = 50;
+    searchHits.slice(0, SHOWN).forEach((h, i) => {
+        const row = document.createElement('div');
+        row.className = 'search-row';
+        const img = document.createElement('img');
+        img.src = firstFrame(imageOf(h.src, h.k)) || '';
+        img.onerror = () => { img.style.visibility = 'hidden'; };
+        applyTint(img, h.tn);
+        const mid = document.createElement('div');
+        const l1 = document.createElement('div'); l1.className = 's-main'; l1.textContent = h.nm;
+        const l2 = document.createElement('div'); l2.className = 's-sub';
+        l2.textContent = `${h.sp} · ${h.gp} · Lv.${h.lv}`;
+        mid.append(l1, l2);
+        const cost = document.createElement('div'); cost.className = 's-cost';
+        cost.textContent = `${curLabel(currencyOf(h))} ${h.cst}`;
+        row.append(img, mid, cost);
+        row.addEventListener('mousedown', ev => { ev.preventDefault(); gotoItem(h); });
+        box.appendChild(row);
+    });
+    if (searchHits.length > SHOWN) {       // 截斷時要講，不然使用者以為就這些
+        const more = document.createElement('div');
+        more.className = 'search-empty';
+        more.textContent = (t.searchMore || '{shown} of {total}')
+            .replace('{shown}', SHOWN).replace('{total}', searchHits.length);
+        box.appendChild(more);
+    }
+    box.style.display = '';
+}
+
+function searchKey(ev) {
+    if (ev.key === 'Escape') { closeSearch(); ev.target.blur(); return; }
+    const rows = [...document.querySelectorAll('#searchResults .search-row')];
+    if (!rows.length) return;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        searchCursor = (searchCursor + (ev.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length;
+        rows.forEach((r, i) => r.classList.toggle('active', i === searchCursor));
+        rows[searchCursor].scrollIntoView({ block: 'nearest' });
+    } else if (ev.key === 'Enter') {
+        ev.preventDefault();
+        gotoItem(searchHits[searchCursor < 0 ? 0 : searchCursor]);
+    }
+}
+
+function closeSearch() {
+    const box = document.getElementById('searchResults');
+    if (box) box.style.display = 'none';
+}
+
+/* 跳到搜尋結果：必要時先切分組，等重繪完才找得到那個格子 */
+function gotoItem(h) {
+    if (!h) return;
+    closeSearch();
+    const jump = () => {
+        const key = `season_data_${h.code}_lv${h.lv}_i${h.idx}`;
+        const el = document.querySelector(`.item[data-key="${key}"]`);
+        if (!el) { showToast((uiDict[currentLang].searchHidden) || 'Hidden'); return; }
+        const card = el.closest('.spirit');
+        const cont = document.getElementById('spiritsContainer');
+        if (card && cont) cont.scrollTo({ left: Math.max(0, card.offsetLeft - 15), behavior: 'smooth' });
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.classList.remove('flash');
+        void el.offsetWidth;                     // 重新觸發動畫
+        el.classList.add('flash');
+        setTimeout(() => el.classList.remove('flash'), 2500);
+    };
+    if (currentSeason !== h.g) {
+        document.getElementById('seasonSelect').value = h.g;
+        switchSeason();
+        requestAnimationFrame(() => requestAnimationFrame(jump));
+    } else jump();
+}
+
+/* ══════════ 分享連結 ══════════
+   把當前這一組的解鎖狀態壓成 bitmap 放進 URL hash。
+   位元順序必須跟 loadSeasonData 產生 key 的順序完全一致，所以這裡
+   重走一次同樣的迴圈，而不是用 items（items 會被「隱藏畢業禮」過濾掉）。
+   格式：版本(1) + 項目數(2) + bitmap + 每隻先祖 3 bytes 的陪伴好感度 */
+function groupEntries(gk) {
+    const g = spiritData[gk], keys = [], codes = [];
+    Object.keys(g.spirits).forEach(code => {
+        codes.push(code);
+        g.spirits[code].items.forEach((it, idx) => keys.push(`season_data_${code}_lv${it.level}_i${idx}`));
+    });
+    return { keys, codes };
+}
+
+function b64urlEnc(bytes) {
+    let s = ''; bytes.forEach(b => s += String.fromCharCode(b));
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlDec(str) {
+    const s = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(s, c => c.charCodeAt(0));
+}
+
+function shareLink() {
+    const { keys, codes } = groupEntries(currentSeason);
+    const bits = new Uint8Array(Math.ceil(keys.length / 8));
+    keys.forEach((k, i) => {
+        if (localStorage.getItem(`${currentProfileId}_${k}`) === 'true') bits[i >> 3] |= 1 << (i & 7);
+    });
+    const exp = new Uint8Array(codes.length * 3);
+    codes.forEach((c, i) => {
+        const v = Math.max(0, Math.min(16777215, Math.round(spiritExpMap[`season_data_${c}`] || 0)));
+        exp[i * 3] = v >> 16; exp[i * 3 + 1] = (v >> 8) & 255; exp[i * 3 + 2] = v & 255;
+    });
+    const head = new Uint8Array([1, keys.length >> 8, keys.length & 255]);
+    const all = new Uint8Array(head.length + bits.length + exp.length);
+    all.set(head, 0); all.set(bits, head.length); all.set(exp, head.length + bits.length);
+    const url = `${location.origin}${location.pathname}#s=${currentSeason}.${b64urlEnc(all)}`;
+    const t = uiDict[currentLang];
+    navigator.clipboard?.writeText(url).then(
+        () => showToast(`${t.shareCopied || 'Copied'} (${url.length} 字元)`),
+        () => prompt(t.shareCopied || 'Copy', url));
+}
+
+let sharedView = null;       // { g, unlocked:Set, exp:{} }
+
+function readShareHash() {
+    try { return parseShareHash(); }
+    catch (e) {                       // 壞掉的連結絕不能讓整頁渲染不出來
+        console.error('[share]', e);
+        return null;
+    }
+}
+
+function parseShareHash() {
+    const m = (location.hash || '').match(/^#s=([A-Za-z0-9_]+)\.([A-Za-z0-9\-_]+)$/);
+    if (!m) return null;
+    const gk = m[1];
+    // 必須是 spiritData 自己的屬性。直接寫 spiritData[gk] 會命中原型鏈上的
+    // __proto__ / constructor / toString —— 它們都是 truthy，往下走就會在
+    // Object.keys(g.spirits) 炸掉，整頁變空白。#s=__proto__.AQAh 即可重現。
+    if (!Object.prototype.hasOwnProperty.call(spiritData, gk)) return null;
+    let raw; try { raw = b64urlDec(m[2]); } catch (_) { return null; }
+    if (raw.length < 3 || raw[0] !== 1) return null;
+    const { keys, codes } = groupEntries(gk);
+    const n = (raw[1] << 8) | raw[2];
+    if (n !== keys.length) return { g: gk, stale: true };
+    const nb = Math.ceil(n / 8);
+    const unlocked = new Set();
+    keys.forEach((k, i) => { if (raw[3 + (i >> 3)] & (1 << (i & 7))) unlocked.add(k); });
+    const exp = {};
+    codes.forEach((c, i) => {
+        const o = 3 + nb + i * 3;
+        if (o + 2 < raw.length) exp[`season_data_${c}`] = (raw[o] << 16) | (raw[o + 1] << 8) | raw[o + 2];
+    });
+    return { g: gk, unlocked, exp };
+}
+
+function renderShareBar() {
+    const bar = document.getElementById('shareBar');
+    if (!bar) return;
+    if (!sharedView) { bar.style.display = 'none'; return; }
+    const t = uiDict[currentLang];
+    bar.innerHTML = '';
+    const msg = document.createElement('span');
+    if (sharedView.stale) {
+        const strong = document.createElement('b');
+        strong.textContent = t.shareStale || 'Link is out of date';
+        msg.appendChild(strong);
+        bar.append(msg);
+    } else {
+        const strong = document.createElement('b');
+        strong.textContent = t.shareViewing || 'Viewing shared progress';
+        msg.appendChild(strong);
+        const apply = document.createElement('button');
+        apply.className = 'btn-secondary'; apply.textContent = t.shareApply || 'Apply';
+        apply.onclick = applyShared;
+        const leave = document.createElement('button');
+        leave.className = 'btn-reset'; leave.textContent = t.shareLeave || 'Leave';
+        leave.onclick = leaveShared;
+        bar.append(msg, apply, leave);
+    }
+    bar.style.display = '';
+}
+
+function applyShared() {
+    if (!sharedView || sharedView.stale) return;
+    const { keys } = groupEntries(sharedView.g);
+    keys.forEach(k => localStorage.setItem(`${currentProfileId}_${k}`, sharedView.unlocked.has(k)));
+    Object.assign(spiritExpMap, sharedView.exp);
+    localStorage.setItem(`${currentProfileId}_spiritExpMap`, JSON.stringify(spiritExpMap));
+    leaveShared();
+    showToast(uiDict[currentLang].shareApplied || 'Applied');
+}
+
+function leaveShared() {
+    sharedView = null;
+    history.replaceState(null, '', location.pathname + location.search);
+    loadSeasonData();
+    renderShareBar();
+}
+
+/* ══════════ 單檔離線版 ══════════
+   現在的 1.html 下載下來雙擊是打不開的：file:// 的 origin 是 null，
+   fetch('data/*.json') 會被 CORS 擋掉。把三支 JSON 內嵌成一個 <script>
+   就沒有這個問題 —— 載入時優先讀內嵌資料，讀不到才走 fetch。 */
+async function exportOffline() {
+    const t = uiDict[currentLang];
+    try {
+        showToast(t.offlineWait || 'Packing...');
+        const res = await fetch(location.href.split('#')[0], { cache: 'no-store' });
+        let html = await res.text();
+        // 移除上一版的內嵌標籤（重複匯出時）。只在 <head> 範圍內找 ——
+        // 整份搜尋會比對到本函式自己的樣板字串，然後一路吃到主程式的結束標籤，
+        // 把半個程式刪掉（實測匯出檔會從這行註解處被截斷）。
+        const headEnd = html.indexOf('</head>');
+        const marker = 'id="' + 'embedded-data' + '"';
+        const at = html.lastIndexOf(marker, headEnd);
+        if (at !== -1) {
+            const open = html.lastIndexOf('<scr' + 'ipt', at);
+            const close = html.indexOf('</scr' + 'ipt>', at);
+            if (open !== -1 && close !== -1 && close < headEnd)
+                html = html.slice(0, open) + html.slice(close + 9);
+        }
+        // 所有 < 一律轉成 \u003c（JSON 讀回來完全相同）。
+        // 只轉義 </ 不夠：HTML 的 script 解析狀態機看到註解起始後接 script 開標籤
+        // 就會切換狀態（這裡不敢把那串字面寫出來，寫了這個 script 自己就會被截斷），
+        // 之後的結束標籤就關不掉這個區塊，匯出的檔案會靜默壞掉（實測 0 張卡、不報錯）。
+        const payload = JSON.stringify({ data: spiritData, i18n: i18nData, images: imageData })
+            .replace(/</g, '\\u003c')
+        const tag = `<scr` + `ipt id="embedded-data" type="application/json">${payload}</scr` + `ipt>\n`;
+        html = html.replace('</head>', tag + '</head>');
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `skytrust-offline-${new Date().toISOString().slice(0, 10)}.html`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        showToast(`${t.offlineDone || 'Saved'} (${Math.round(blob.size / 1024)} KB)`);
+    } catch (e) {
+        showToast(t.offlineFail || 'Export failed');
+        console.error('[offline export]', e);
+    }
+}
+
+/* 把白色線稿染成指定顏色。
+   feColorMatrix 把 RGB 全部壓成定值、alpha 原樣保留 —— 來源是純白時，
+   結果就是「同形狀的純色圖」。用 CSS filter 的 hue-rotate 做不到：
+   白色沒有色相，轉多少都還是白的。
+   color-interpolation-filters 一定要設 sRGB，預設的 linearRGB 會讓顏色偏亮。
+   同一個顏色只建立一次 filter，整頁共用。 */
+const tintCache = new Map();
+function tintFilter(color) {
+    if (tintCache.has(color)) return tintCache.get(color);
+    const m = /^#?([0-9a-f]{6})$/i.exec(color.trim());
+    if (!m) return '';
+    const n = parseInt(m[1], 16);
+    const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+    const NS = 'http://www.w3.org/2000/svg';
+    const id = 'tint-' + m[1].toLowerCase();
+    const defs = document.getElementById('tintDefs');
+    const f = document.createElementNS(NS, 'filter');
+    f.setAttribute('id', id);
+    f.setAttribute('color-interpolation-filters', 'sRGB');
+    const cm = document.createElementNS(NS, 'feColorMatrix');
+    cm.setAttribute('type', 'matrix');
+    cm.setAttribute('values', `0 0 0 0 ${r} 0 0 0 0 ${g} 0 0 0 0 ${b} 0 0 0 1 0`);
+    f.appendChild(cm);
+    defs.appendChild(f);
+    const v = `url(#${id})`;
+    tintCache.set(color, v);
+    return v;
+}
+
+function applyTint(img, tn) {
+    if (!tn) return;
+    const f = tintFilter(tn);
+    if (!f) return;
+    img.style.filter = f;
+    img.classList.add('tinted');
+}
+
+/* 季卡角標用的是該季的「季節項鍊」圖，跟遊戲內兌換樹標記季卡節點的那枚一致。
+   網址不另外拼：spirits.images.json 已經有 CharSkyKid_Neck_AP{兩位數}Pendant 這組 key
+   （項鍊本身就是樹上的一個項目），所以這裡是查表，不是硬寫 CDN 路徑。
+   images.json 收的是 AP06～AP32，缺 AP16、AP22 —— 而那兩季的 pass 項目剛好是 0，
+   所以需要徽章的分組全部查得到。查不到就讓呼叫端退成字元。 */
+function seasonBadgeUrl(groupKey) {
+    const m = /^season_(\d+)$/.exec(groupKey || '');
+    if (!m) return null;
+    const key = `CharSkyKid_Neck_AP${String(parseInt(m[1], 10)).padStart(2, '0')}Pendant`;
+    return firstFrame(imageOf(key)) || null;
 }
 
 function showToast(msg) {
@@ -651,6 +1137,11 @@ function updateUIText() {
     document.getElementById('ui-pass').textContent = t.pass;
     document.getElementById('ui-hidereward').textContent = t.hideReward;
     document.getElementById('ui-compact').textContent = t.compact;
+    document.getElementById('searchInput').placeholder = t.search;
+    document.getElementById('ui-share').textContent = t.share;
+    document.getElementById('ui-offline').textContent = t.offline;
+    renderShareBar();
+    renderChangelog();      // 更新紀錄是三語各一份，切語言要跟著重畫
     document.getElementById('ui-daily').textContent = t.daily;
     document.getElementById('ui-initial').textContent = t.initial;
     document.getElementById('ui-reset-season').textContent = t.resetSeason;
@@ -736,6 +1227,11 @@ function deleteProfile() {
 
 function switchSeason() {
     currentSeason = document.getElementById('seasonSelect').value;
+    if (sharedView && sharedView.g !== currentSeason) {   // 換組就離開分享檢視
+        sharedView = null;
+        history.replaceState(null, '', location.pathname + location.search);
+        renderShareBar();
+    }
     loadSeasonData();
 }
 
@@ -781,10 +1277,17 @@ function loadSeasonData() {
         wrap.style.display = has ? '' : 'none';
     }
 
-    items.forEach(i => {
-        try { i.unlocked = JSON.parse(localStorage.getItem(`${currentProfileId}_${i.key}`) || 'false'); }
-        catch (_) { i.unlocked = false; }
-    });
+    const shared = sharedView && !sharedView.stale && sharedView.g === currentSeason ? sharedView : null;
+    if (shared) {
+        // 檢視別人的連結：狀態只活在記憶體，不碰 localStorage，也不覆蓋你的進度
+        items.forEach(i => { i.unlocked = shared.unlocked.has(i.key); });
+        Object.assign(spiritExpMap, shared.exp);
+    } else {
+        items.forEach(i => {
+            try { i.unlocked = JSON.parse(localStorage.getItem(`${currentProfileId}_${i.key}`) || 'false'); }
+            catch (_) { i.unlocked = false; }
+        });
+    }
     updateUI();
 }
 
@@ -794,11 +1297,23 @@ function isTimeless() {
 }
 
 function saveState(){
-    items.forEach(i=>localStorage.setItem(`${currentProfileId}_${i.key}`, i.unlocked));
-    localStorage.setItem(`${currentProfileId}_spiritExpMap`, JSON.stringify(spiritExpMap)); 
+    // 配額滿了（或瀏覽器擋了儲存）時要出聲。原本會丟出未捕捉的例外，
+    // 點擊處理器中斷，畫面看起來正常但進度其實沒存進去。
+    try {
+        items.forEach(i=>localStorage.setItem(`${currentProfileId}_${i.key}`, i.unlocked));
+        localStorage.setItem(`${currentProfileId}_spiritExpMap`, JSON.stringify(spiritExpMap));
+    } catch (e) {
+        console.error('[save]', e);
+        showToast(uiDict[currentLang].saveFail || 'Could not save progress');
+    }
 }
 
 /* --- 匯入驗證：只接受本工具自己的 key，其餘一律丟棄 --- */
+// 鍵數上限：鍵名規則允許任意 season_data_<80 字>，所以合法鍵的數量是無限的。
+// 實測匯入 6 萬個假鍵會全部寫進 localStorage（6 秒、6 萬筆垃圾），
+// 再大一點就會撐爆 5MB 配額，之後每次存檔都丟 QuotaExceededError。
+// 1219 個項目 x 幾個方案，2000 綽綽有餘。
+const MAX_IMPORT_KEYS = 2000;
 const PROFILE_ID_RE = /^spirit_(default|profile_\d{1,20})$/;
 const DATA_KEY_RE   = /^spirit_(?:default|profile_\d{1,20})_(?:spiritExpMap|economy|season_data_[A-Za-z0-9_]{1,80})$/;
 
@@ -848,7 +1363,8 @@ function importData(event) {
             for (const [key, value] of Object.entries(data.dataStore)) {
                 // key 必須符合本工具格式，且前綴必須屬於這次匯入的 profile
                 const owner = profiles.find(p => key.startsWith(p.id + '_'));
-                if (DATA_KEY_RE.test(key) && owner && validIds.has(owner.id) && typeof value === 'string' && value.length <= 20000) {
+                if (DATA_KEY_RE.test(key) && owner && validIds.has(owner.id) && typeof value === 'string'
+                        && value.length <= 20000 && accepted.length < MAX_IMPORT_KEYS) {
                     accepted.push([key, value]);
                 } else {
                     skipped++;
@@ -1461,10 +1977,30 @@ function createItemDiv(item, spiritItems, spiritKey, t){
     const openImg = item.unlocked ? imageData[`item.${item.k}.open`] : null;
     const frames = !openImg && Array.isArray(item.image) ? item.image : null;
     img.src = openImg || firstFrame(item.image) || placeholder;
+    applyTint(img, item.tn);          // 染料與季心的白色線稿
     img.onerror = () => { img.src = placeholder; };
     div.appendChild(img);
     if (frames && frames.length > 1) registerAnimation(img, frames);
 
+    // 季卡限定的角標。圖載不到就退成 ✦（離線、CDN 掛掉、或那一季沒有徽章資產），
+    // 標記本身不會消失 —— 這是唯一還在指出「這格要季卡」的東西了。
+    if (item.season) {
+        const badge = document.createElement('i');
+        badge.className = 'pass-badge';
+        const url = seasonBadgeUrl(currentSeason);
+        if (url) {
+            const bi = document.createElement('img');
+            bi.alt = '';
+            bi.onerror = () => { bi.remove(); badge.classList.add('glyph'); };
+            bi.src = url;
+            badge.appendChild(bi);
+        } else {
+            badge.classList.add('glyph');
+        }
+        div.appendChild(badge);
+    }
+
+    div.dataset.key = item.key;     // 搜尋跳轉用
     // 名稱那行掛 class：緊湊模式要單獨把它壓成一行（CSS .item .nm）
     const line = (txt, cls) => {
         const d = document.createElement('div');
@@ -1493,6 +2029,10 @@ function createItemDiv(item, spiritItems, spiritKey, t){
     }
 
     div.addEventListener('click', ()=>{
+        if (sharedView && !sharedView.stale) {     // 檢視分享時唯讀
+            showToast(uiDict[currentLang].shareReadonly || 'Read-only');
+            return;
+        }
         const maxLevel = calcMaxLevel(spiritKey, spiritItems);
         if(item.level <= maxLevel || item.unlocked){
             item.unlocked=!item.unlocked;
